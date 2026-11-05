@@ -5,6 +5,7 @@ import {
   canonicalIPv4,
   canonicalIPv6,
   ensureTrailingDot,
+  isReverseName,
   isSubdomain,
   normalizeName,
   parentName,
@@ -598,9 +599,11 @@ export async function analyzeWorkspace(workspace, model) {
     });
   }
   for (const channel of model.channels || []) {
-    const size = channel.options.get('size');
-    const versions = channel.options.get('versions');
-    if (channel.options.get('file') && (!size || !versions)) {
+    const fileEntry = channel.options.get('file')?.[0];
+    const fileArgs = (fileEntry?.args || []).map((arg) => String(arg).toLowerCase());
+    const size = channel.options.get('size') || (fileArgs.includes('size') ? channel.options.get('file') : null);
+    const versions = channel.options.get('versions') || (fileArgs.includes('versions') ? channel.options.get('file') : null);
+    if (fileEntry && (!size || !versions)) {
       add('recommendation', 'Operations', findingId('channel-unbounded', channel.name), `Log channel ${channel.name} may grow without bound`, 'A file channel has no explicit size/versions rotation policy.', {
         file: channel.file,
         line: channel.line,
@@ -643,7 +646,7 @@ export async function analyzeWorkspace(workspace, model) {
       learn: 'hardening',
     });
   }
-  if (!(model.responsePolicies || []).length) {
+  if (recursion === true && !(model.responsePolicies || []).length) {
     add('recommendation', 'Security', 'rpz', 'Consider a Response Policy Zone', 'No response-policy is configured.', {
       why: 'RPZ is a local, DNS-native policy layer for blocking or rewriting known-bad names before clients receive them. It is optional, but a strong control for recursive resolvers.',
       recommendation: 'If this is a recursive resolver, evaluate a maintained RPZ feed and test it in observe-only mode first.',
@@ -1363,7 +1366,7 @@ export async function analyzeWorkspace(workspace, model) {
       }
     }
 
-    if (!records.some((record) => record.type === 'CAA') && records.length) {
+    if (!records.some((record) => record.type === 'CAA') && records.length && !isReverseName(apex)) {
       add('recommendation', 'Email & PKI', findingId('caa-missing', zone.name), `Zone ${zone.name} has no CAA policy`, 'No CAA records were found.', {
         file,
         line: zone.line,

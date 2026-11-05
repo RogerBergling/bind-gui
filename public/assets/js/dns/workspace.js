@@ -473,7 +473,7 @@ export function parseWorkspace(workspace) {
             });
           }
         }
-      } else if (statement.keyword === 'dnssec-policy') {
+      } else if (statement.keyword === 'dnssec-policy' && statement.hasBlock) {
         policies.push({
           name: statement.args[0] || '(unnamed)',
           options: bodyEntries(statement),

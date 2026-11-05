@@ -75,7 +75,12 @@ export async function renderHome(view) {
     </div>
   </section>` : '';
 
-  const sampleCards = SAMPLES.map((sample) => `<article class="sample-card">
+  const sampleList = [...SAMPLES].sort((left, right) => {
+    if (left.id === 'complete-authoritative') return -1;
+    if (right.id === 'complete-authoritative') return 1;
+    return 0;
+  });
+  const sampleCards = sampleList.map((sample) => `<article class="sample-card">
     <div class="sample-card-head">${pill(sample.files.length + ' files', 'accent', 'package')}<span class="sample-lines">${escapeHTML(sample.architecture)}</span></div>
     <h3>${escapeHTML(sample.title)}</h3>
     <p>${escapeHTML(sample.description)}</p>

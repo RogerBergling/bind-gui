@@ -105,9 +105,9 @@ Everything except the explicit DoH queries runs locally in the browser.
 | --- | --- |
 | [![DNSSEC audit](docs/screenshots/audit.png)](docs/screenshots/audit.png) | [![Login](docs/screenshots/login.png)](docs/screenshots/login.png) |
 
-| Learn | |
+| Complete production example | Learn |
 | --- | --- |
-| [![Learning](docs/screenshots/learn.png)](docs/screenshots/learn.png) | |
+| [![Complete example](docs/screenshots/complete.png)](docs/screenshots/complete.png) | [![Learning](docs/screenshots/learn.png)](docs/screenshots/learn.png) |
 
 All screenshots use the included anonymised examples and the real UI. The live screenshots show public `example.com` answers from Cloudflare and Google.
 
@@ -305,7 +305,8 @@ Open the site through the server, not as a `file://` URL, because ES modules and
 
 All examples use documentation TLDs and TEST-NET addresses.
 
-- **Authoritative example.com** — a clean multi-file setup with `named.conf`, separate options/local includes, forward and reverse zones, logging, statistics and a delegated child with glue. Good for import, compare and export.
+- **Complete authoritative production layout** — the full example: separate `named.conf` includes for ACLs, TSIG keys, options, logging and DNSSEC policy; modern ECDSA/NSEC3 policy with inline signing; primary `example.com`, delegated `lab.example.com`, reverse zone, TSIG-protected secondary `example.net`; rndc and statistics restrictions; rate limiting; CAA, SPF, DMARC, MX, SRV and service records; a `README.txt` with deployment, validation, permissions and DS publishing guidance. It was also validated with real BIND 9.20 `named-checkconf -z` and `named-checkzone`.
+- **Authoritative example.com** — a smaller clean multi-file setup with `named.conf`, separate options/local includes, forward and reverse zones, logging, statistics and a delegated child with glue. Good for import, compare and export.
 - **Split horizon with views and TSIG** — internal/external views, a secondary zone using `primaries` and a TSIG key, an RPZ and a statistics channel. Good for learning policy structure and reviewing warnings.
 - **Problem clinic** — deliberately broken: open recursion, open transfers, unauthenticated dynamic updates, a weak TSIG key, CNAME conflicts, missing glue, bad SOA timers, out-of-zone data and DNSSEC mistakes. Good for seeing the analyzer explain real failures.
 
