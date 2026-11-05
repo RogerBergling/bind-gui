@@ -1,0 +1,40 @@
+name: bind-workbench
+
+# Quick start:
+#   docker compose up -d
+#   open http://localhost:8005
+#
+# The image is published at ghcr.io/rogerbergling/bind-gui:latest.
+# Nothing is persisted in the container: configs and history live in the
+# browser's localStorage. Live DNS is opt-in and uses only the DoH endpoints
+# allowed by the application's Content-Security-Policy.
+#
+# This deployment intentionally does not include Watchtower or mount the
+# Docker socket. Update deliberately:
+#   docker compose pull
+#   docker compose up -d --force-recreate
+
+services:
+  bind-workbench:
+    image: ghcr.io/rogerbergling/bind-gui:latest
+    container_name: bind-workbench
+    mem_limit: 128m
+    mem_reservation: 32m
+    memswap_limit: 128m
+    ports:
+      - "127.0.0.1:8005:8080"
+    restart: unless-stopped
+    pull_policy: always
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:8080/', timeout=2).read()"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

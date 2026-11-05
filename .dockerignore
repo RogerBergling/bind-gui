@@ -1,0 +1,17 @@
+.git
+.github
+docs
+tests
+scripts
+node_modules
+.env
+.env.*
+*.log
+*.sqlite
+*.db
+README.md
+LICENSE
+compose.yaml
+package.json
+.editorconfig
+.gitignore

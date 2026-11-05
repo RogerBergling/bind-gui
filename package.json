@@ -1,0 +1,18 @@
+{
+  "name": "bind-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Local-first BIND DNS configuration workbench: import, explain, analyze, compare, validate and export named.conf and zone files.",
+  "scripts": {
+    "start": "python3 start.py",
+    "test": "node --test",
+    "check": "node scripts/check-js.mjs",
+    "verify": "python3 scripts/verify.py",
+    "smoke": "python3 scripts/smoke.py"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
