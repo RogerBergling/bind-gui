@@ -464,4 +464,9 @@ BIND is developed by Internet Systems Consortium. This project is unofficial and
 
 ## Development note
 
-This project was developed with AI assistance and human review. The maintainer defines the requirements, threat model, edge cases and acceptance criteria; AI helps write and refactor code; the maintainer tests, breaks and verifies it. The software is provided as-is, without warranty.
+This project was developed with AI assistance and human review. The maintainer
+defines the requirements, threat model, edge cases and acceptance criteria; AI
+helps write and refactor code; the maintainer tests, breaks and verifies it.
+The software is provided as-is, without warranty. See
+[How this was built](https://apps.bergling.net/how-this-was-built/) for the
+longer explanation.
