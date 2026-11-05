@@ -238,6 +238,7 @@ The ZIP can be re-imported. Source paths, hashes and the workspace manifest make
 - A DNS record-type reference with fields, purpose, DNSSEC notes, gotchas and examples.
 - A searchable glossary of DNS/BIND terms and aliases.
 - **Learn this config** in the Workbench walks the directives in your actual file, with context and links.
+- A link to the companion [Learning Lab](https://learning.bergling.net) — an independent browser-local site with six tracks (OneGate, Docker, Git/GHCR, HAProxy, ESXi performance and BIND), written chapters, animated simulations, token/credential walkthroughs, comparisons, glossary, quizzes and self-checks.
 
 ---
 

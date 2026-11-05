@@ -1044,3 +1044,32 @@ dialog.modal::backdrop { background: rgba(2, 6, 15, .72); backdrop-filter: blur(
   .upload-gate-control { width: 100%; margin-left: 0; }
   .upload-gate-input { flex: 1; min-width: 0; }
 }
+
+/* ---------- companion learning site ---------- */
+.learning-lab-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(240px, .55fr);
+  gap: 1.2rem;
+  align-items: center;
+  padding: 1.15rem 1.25rem;
+  margin: 1.2rem 0 1.4rem;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 32%, transparent);
+  border-radius: var(--radius);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent-2) 8%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
+}
+.learning-lab-copy h2 { font-size: clamp(1.15rem, 2.2vw, 1.45rem); margin: .1rem 0 .45rem; }
+.learning-lab-copy p { color: var(--muted); font-size: .84rem; margin: 0; max-width: 88ch; }
+.learning-lab-copy .link-row { margin-top: .7rem; align-items: center; }
+.learning-lab-topics { display: flex; flex-wrap: wrap; gap: .35rem; }
+.learning-lab-topics span {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: .22rem .5rem;
+}
+@media (max-width: 760px) {
+  .learning-lab-card { grid-template-columns: 1fr; }
+}

@@ -36,6 +36,18 @@ export function renderLearn(view, param, query) {
     <span class="filter-result" id="learn-count">${ARTICLES.length} articles</span>
   </div>
 
+  <section class="learning-lab-card">
+    <div class="learning-lab-copy">
+      <span class="eyebrow">Companion learning site</span>
+      <h2>More simulations, quizzes and a wider operations library</h2>
+      <p><a href="https://learning.bergling.net" target="_blank" rel="noopener noreferrer">learning.bergling.net</a> is an independent, browser-local learning lab covering six tracks: OneGate federation, Docker on Linux, Git &amp; GHCR, HAProxy, ESXi performance and BIND DNS. It contains written chapters, animated flow simulations, credential and token walkthroughs, side-by-side comparisons, a glossary, quizzes and self-checks. Everything runs in the browser; the examples and simulated credentials are illustrative rather than production configuration.</p>
+      <div class="link-row"><a class="btn btn-primary" href="https://learning.bergling.net" target="_blank" rel="noopener noreferrer">${icon('external', 15)} Open Learning Lab</a><span class="muted-note">${icon('info', 14)} Best for visual flow practice and self-testing alongside these BIND guides.</span></div>
+    </div>
+    <div class="learning-lab-topics">
+      <span>OneGate federation</span><span>Docker on Linux</span><span>Git &amp; GHCR</span><span>HAProxy</span><span>ESXi performance</span><span>BIND DNS</span>
+    </div>
+  </section>
+
   <div class="learning-paths">${LEARNING_PATHS.map((path) => `<article class="learning-path">
     <span class="eyebrow">Path</span><h2>${escapeHTML(path.title)}</h2><p>${escapeHTML(path.description)}</p>
     <div class="path-steps">${path.articles.map((id, index) => {
