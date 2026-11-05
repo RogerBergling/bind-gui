@@ -72,6 +72,23 @@ When the variable is set:
 - The top bar shows a lock button when auth is enabled; it clears the session and returns to the login page.
 - The password protects the whole app, not just a single upload route. Configurations still never leave the browser.
 
+### Optional import/upload password
+
+A dedicated password can gate the import workflow even when the app itself is open:
+
+```text
+BIND_WORKBENCH_UPLOAD_PASSWORD=another-long-random-value
+```
+
+With this set, the first file/folder/ZIP import in a tab opens an **Import password** dialog. The password is checked server-side against `POST /api/upload-auth`; it is not stored in the browser. A per-tab unlocked flag avoids asking again until the tab closes or the session is locked.
+
+- If `BIND_WORKBENCH_UPLOAD_PASSWORD` is empty, it falls back to `BIND_WORKBENCH_PASSWORD` when that is set.
+- If both are empty, imports run without a password.
+- If only the upload password is set, the app itself stays open but every import is gated.
+- If the app password is set too, the login gate remains the real access boundary; the import dialog is a second confirmation for file reading.
+
+**Security honesty:** because imports are read locally with the browser File API, the import password is a server-verified workflow gate, not a server upload boundary. Someone with full control of the browser and devtools can still read local files directly. Use `BIND_WORKBENCH_PASSWORD` and/or reverse-proxy authentication when you need to protect access to the app itself.
+
 > **Use HTTPS whenever the password gate is reachable beyond localhost.** The password is submitted over HTTP and a reverse proxy should terminate TLS. Set `X-Forwarded-Proto: https` so the session cookie is marked `Secure`. For public or multi-user deployments, also use reverse-proxy authentication (Basic Auth, OIDC or an identity-aware proxy); this app-level password is a single shared secret, not a user system.
 
 If the login page does not appear:
@@ -87,7 +104,7 @@ docker compose up -d --force-recreate
 docker compose logs --tail=20
 ```
 
-If you run `python3 start.py` directly, `.env` is loaded from the directory containing `start.py`; use `BIND_WORKBENCH_ENV_FILE=/path/to/.env` if it lives elsewhere. If `BIND_WORKBENCH_PASSWORD` is empty, the gate is deliberately disabled.
+If you run `python3 start.py` directly, `.env` is loaded from the directory containing `start.py`; use `BIND_WORKBENCH_ENV_FILE=/path/to/.env` if it lives elsewhere. If `BIND_WORKBENCH_PASSWORD` is empty, the app login gate is deliberately disabled. Keep `.env` at mode `0600`, and prefer a secret manager for shared or production deployments; environment variables are visible to users who can inspect the container.
 
 ### First five minutes
 
@@ -125,6 +142,10 @@ Everything except the explicit DoH queries runs locally in the browser.
 | Complete production example | Learn |
 | --- | --- |
 | [![Complete example](docs/screenshots/complete.png)](docs/screenshots/complete.png) | [![Learning](docs/screenshots/learn.png)](docs/screenshots/learn.png) |
+
+| Import/upload password | |
+| --- | --- |
+| [![Import password](docs/screenshots/import-password.png)](docs/screenshots/import-password.png) | |
 
 All screenshots use the included anonymised examples and the real UI. The live screenshots show public `example.com` answers from Cloudflare and Google.
 
@@ -234,9 +255,9 @@ Server / container
   static files + GET /version.json + optional auth session API
 ```
 
-- The container runs a Python stdlib static server. It has no config API, database, write path or configuration storage. The optional password gate adds only `/api/auth-status`, `/api/login` and `/api/logout`.
+- The container runs a Python stdlib static server. It has no config API, database, write path or configuration storage. The optional password gates add only `/api/auth-status`, `/api/login`, `/api/logout`, `/api/upload-status` and `/api/upload-auth`: session and import-password checks, never configuration data.
 - Imported configs are read by the browser and serialized into `localStorage` only when you import, edit or save.
-- The app fetches `/version.json` for build metadata. When a password is configured, `/api/auth-status`, `/api/login` and `/api/logout` handle the session cookie only. Live DNS fetches go to the two DoH origins after opt-in.
+- The app fetches `/version.json` for build metadata. When a password is configured, `/api/auth-status`, `/api/login`, `/api/logout`, `/api/upload-status` and `/api/upload-auth` handle only the session/import-password checks. Live DNS fetches go to the two DoH origins after opt-in.
 - No external fonts, CDNs, analytics, crash reporting or advertising.
 - Strict CSP, `frame-ancestors 'none'`, `no-referrer`, `nosniff`, COOP/CORP and `no-store` caching.
 - The Docker image runs as a non-root user, read-only, with all capabilities dropped and `no-new-privileges` in the included Compose file.

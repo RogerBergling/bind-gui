@@ -30,6 +30,7 @@ services:
       # Optional. Set BIND_WORKBENCH_PASSWORD in .env or the shell to require
       # a server-side login before any app or import surface is served.
       BIND_WORKBENCH_PASSWORD: ${BIND_WORKBENCH_PASSWORD:-}
+      BIND_WORKBENCH_UPLOAD_PASSWORD: ${BIND_WORKBENCH_UPLOAD_PASSWORD:-}
       BIND_WORKBENCH_SESSION_HOURS: ${BIND_WORKBENCH_SESSION_HOURS:-12}
     tmpfs:
       - /tmp:size=8m

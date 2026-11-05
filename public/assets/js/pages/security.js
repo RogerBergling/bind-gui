@@ -32,6 +32,7 @@ export function renderSecurity(view) {
       <tr><td>Snapshots and history</td><td>localStorage</td><td>No</td><td>Up to 100 versions, bounded by a local size budget.</td></tr>
       <tr><td>Settings and theme</td><td>localStorage</td><td>No</td><td>Includes the online-lookup consent flag.</td></tr>
       <tr><td>Password session (optional)</td><td>Server memory + HttpOnly cookie</td><td>No configuration data</td><td>Only when <code>BIND_WORKBENCH_PASSWORD</code> is set. The password is compared server-side; the cookie contains a random session token.</td></tr>
+      <tr><td>Import password check (optional)</td><td>Server memory / request header</td><td>No configuration data</td><td>Only when <code>BIND_WORKBENCH_UPLOAD_PASSWORD</code> or the app password is set. The password is checked before the browser reads a file; only a per-tab unlocked flag is stored.</td></tr>
       <tr><td>Live DNS query name/type</td><td>Selected DoH resolver</td><td>Yes, only after opt-in</td><td>DoH endpoint receives the queried name and type. Configuration files are never included.</td></tr>
       <tr><td>Downloaded exports</td><td>Your filesystem</td><td>As a file you request</td><td>Plaintext, possibly including TSIG secrets found in source files.</td></tr>
     </tbody></table></div>
@@ -46,6 +47,7 @@ export function renderSecurity(view) {
       <li>Five failed attempts per IP per minute trigger a temporary <code>429</code> throttle.</li>
       <li>The top bar shows a lock button when the gate is enabled; it clears the session and returns to the login page.</li>
       <li>This protects the whole app, including imports, history, compare and export. It does not encrypt transport; use HTTPS in front of it.</li>
+      <li>An optional <code>BIND_WORKBENCH_UPLOAD_PASSWORD</code> adds a second server-verified prompt before a file/folder/ZIP is read. If it is empty, it falls back to the app password. The import prompt is a workflow gate because files are read locally; the app login remains the access boundary.</li>
       <li>It is a single shared secret, not a user account system. Use reverse-proxy authentication (Basic Auth, OIDC or an identity-aware proxy) for multi-user or internet-facing deployments.</li>
     </ul>
     <div class="callout warn">${icon('warning', 18)}<div><strong>Cookie and proxy detail</strong><p>The session cookie is marked <code>Secure</code> only when the server sees <code>X-Forwarded-Proto: https</code>. Configure your reverse proxy to set that header and to terminate TLS. Never expose a password-protected HTTP listener to an untrusted network.</p></div></div>

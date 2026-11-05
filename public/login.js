@@ -64,6 +64,11 @@ form.addEventListener('submit', async (event) => {
       /* keep the status-code message */
     }
     if (response.ok && data.ok) {
+      try {
+        sessionStorage.removeItem('bind-workbench:upload-unlocked');
+      } catch {
+        /* ignore */
+      }
       location.reload();
       return;
     }

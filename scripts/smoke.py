@@ -71,8 +71,9 @@ def auth_request(port: int, path: str, method: str = "GET", headers: dict | None
 def run_auth_tests(failures: list[str]) -> None:
     port = free_port()
     password = "correct horse battery staple"
+    upload_password = "different import password"
     env_handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False)
-    env_handle.write(f"BIND_WORKBENCH_PASSWORD={password}\nBIND_WORKBENCH_SESSION_HOURS=1\n")
+    env_handle.write(f"BIND_WORKBENCH_PASSWORD={password}\nBIND_WORKBENCH_UPLOAD_PASSWORD={upload_password}\nBIND_WORKBENCH_SESSION_HOURS=1\n")
     env_handle.close()
     env = {**os.environ, "BIND_WORKBENCH_ENV_FILE": env_handle.name}
     env.pop("BIND_WORKBENCH_PASSWORD", None)
@@ -105,7 +106,9 @@ def run_auth_tests(failures: list[str]) -> None:
         status, _, body = auth_request(port, "/api/auth-status")
         if status != 200 or b'"required":true' not in body or b'"authenticated":false' not in body:
             failures.append("auth-status did not report the unauthenticated gate")
-
+        status, _, body = auth_request(port, "/api/upload-status")
+        if status != 200 or b'"required":true' not in body or b'"separatePassword":true' not in body:
+            failures.append("upload-status did not report the import gate")
         status, headers, body = auth_request(
             port,
             "/api/login",
@@ -134,6 +137,23 @@ def run_auth_tests(failures: list[str]) -> None:
         cookie = cookie_header.split(";", 1)[0]
         if not cookie.startswith("bind_workbench_session="):
             failures.append("Session cookie has an unexpected name")
+
+        status, _, body = auth_request(
+            port,
+            "/api/upload-auth",
+            "POST",
+            {"Cookie": cookie, "X-Bind-Upload-Password": "wrong"},
+        )
+        if status != 401 or b"Invalid import password" not in body:
+            failures.append("Wrong import password did not return 401")
+        status, _, body = auth_request(
+            port,
+            "/api/upload-auth",
+            "POST",
+            {"Cookie": cookie, "X-Bind-Upload-Password": upload_password},
+        )
+        if status != 200:
+            failures.append("Correct import password was rejected")
 
         status, _, body = auth_request(port, "/api/auth-status", headers={"Cookie": cookie})
         if status != 200 or b'"authenticated":true' not in body:

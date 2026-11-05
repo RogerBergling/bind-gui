@@ -24,6 +24,11 @@ export async function initAuth() {
     button.addEventListener('click', async () => {
       button.disabled = true;
       try {
+        sessionStorage.removeItem('bind-workbench:upload-unlocked');
+      } catch {
+        /* ignore */
+      }
+      try {
         await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
       } catch {
         /* Clear the cookie on the next request anyway; still navigate to login. */

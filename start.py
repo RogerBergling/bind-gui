@@ -8,10 +8,13 @@ routes described below.
 
 Optional password protection:
     BIND_WORKBENCH_PASSWORD=... python3 start.py
+    BIND_WORKBENCH_UPLOAD_PASSWORD=... python3 start.py
 
-When the environment variable is set, the whole app is gated behind a login
-page and an HttpOnly session cookie. The password is checked server-side with
-hmac.compare_digest and is never embedded in the frontend bundle.
+When BIND_WORKBENCH_PASSWORD is set, the whole app is gated behind a login
+page and an HttpOnly session cookie. BIND_WORKBENCH_UPLOAD_PASSWORD adds a
+second server-verified prompt before configuration files are imported; if it
+is empty it falls back to the app password. Both are checked server-side with
+hmac.compare_digest and are never embedded in the frontend bundle.
 
     python3 start.py                  # pick a free port (8005-8025) and open a browser
     python3 start.py --no-browser     # serve only
@@ -71,9 +74,13 @@ ENV_FILE = Path(os.environ.get("BIND_WORKBENCH_ENV_FILE", str(ROOT / ".env"))).e
 load_env_file(ENV_FILE)
 
 PASSWORD_ENV = "BIND_WORKBENCH_PASSWORD"
+UPLOAD_PASSWORD_ENV = "BIND_WORKBENCH_UPLOAD_PASSWORD"
 SESSION_HOURS_ENV = "BIND_WORKBENCH_SESSION_HOURS"
 AUTH_PASSWORD = os.environ.get(PASSWORD_ENV, "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
+UPLOAD_PASSWORD_OVERRIDE = os.environ.get(UPLOAD_PASSWORD_ENV, "")
+UPLOAD_PASSWORD = UPLOAD_PASSWORD_OVERRIDE or AUTH_PASSWORD
+UPLOAD_AUTH_ENABLED = bool(UPLOAD_PASSWORD)
 SESSION_COOKIE = "bind_workbench_session"
 try:
     _SESSION_HOURS = int(os.environ.get(SESSION_HOURS_ENV, "12") or "12")
@@ -89,6 +96,7 @@ LOGIN_FAILURE_WINDOW = 60
 SESSIONS: dict[str, float] = {}
 SESSIONS_LOCK = threading.Lock()
 LOGIN_FAILURES: dict[str, list[float]] = {}
+UPLOAD_FAILURES: dict[str, list[float]] = {}
 FAILURES_LOCK = threading.Lock()
 
 NO_CACHE = "no-store, no-cache, must-revalidate, max-age=0"
@@ -276,6 +284,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with FAILURES_LOCK:
             LOGIN_FAILURES.pop(self._client_ip(), None)
 
+    def _upload_status(self) -> None:
+        self._send_json(200, {
+            "required": UPLOAD_AUTH_ENABLED,
+            "separatePassword": bool(UPLOAD_PASSWORD_OVERRIDE),
+            "sessionProtected": AUTH_ENABLED,
+        })
+
+    def _upload_rate_limited(self) -> bool:
+        ip = self._client_ip()
+        now = time.time()
+        with FAILURES_LOCK:
+            failures = [stamp for stamp in UPLOAD_FAILURES.get(ip, []) if now - stamp < LOGIN_FAILURE_WINDOW]
+            UPLOAD_FAILURES[ip] = failures
+            return len(failures) >= LOGIN_FAILURE_LIMIT
+
+    def _record_upload_failure(self) -> None:
+        ip = self._client_ip()
+        now = time.time()
+        with FAILURES_LOCK:
+            failures = [stamp for stamp in UPLOAD_FAILURES.get(ip, []) if now - stamp < LOGIN_FAILURE_WINDOW]
+            failures.append(now)
+            UPLOAD_FAILURES[ip] = failures[-LOGIN_FAILURE_LIMIT:]
+
+    def _clear_upload_failures(self) -> None:
+        with FAILURES_LOCK:
+            UPLOAD_FAILURES.pop(self._client_ip(), None)
+
+    def _handle_upload_auth(self) -> None:
+        if AUTH_ENABLED and not self._authenticated():
+            self._send_json(401, {"ok": False, "error": "Authentication required."})
+            return
+        if not UPLOAD_AUTH_ENABLED:
+            self._send_json(200, {"ok": True})
+            return
+        if self._upload_rate_limited():
+            self._send_json(429, {"ok": False, "error": "Too many attempts. Wait a minute and try again."})
+            return
+        provided = self.headers.get("X-Bind-Upload-Password", "")
+        if not provided or not hmac.compare_digest(provided.encode("utf-8"), UPLOAD_PASSWORD.encode("utf-8")):
+            self._record_upload_failure()
+            self._send_json(401, {"ok": False, "error": "Invalid import password."})
+            return
+        self._clear_upload_failures()
+        self._send_json(200, {"ok": True})
+
     def _handle_login(self) -> None:
         if not AUTH_ENABLED:
             self._send_json(200, {"ok": True})
@@ -351,6 +404,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/auth-status":
             self._auth_status()
             return False
+        if path == "/api/upload-status":
+            self._upload_status()
+            return False
         if path in ("/login", "/login.html"):
             if AUTH_ENABLED:
                 self._serve_login()
@@ -388,6 +444,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if path == "/api/logout":
             self._handle_logout()
+            return
+        if path == "/api/upload-auth":
+            self._handle_upload_auth()
             return
         self._send_json(404, {"ok": False, "error": "Not found."})
 
@@ -451,6 +510,7 @@ def main() -> int:
     print(f"  Open    : {url}")
     print(f"  Env file: {ENV_FILE if ENV_FILE.exists() else 'not present (optional)'}")
     print(f"  Auth    : {'password required (BIND_WORKBENCH_PASSWORD set)' if AUTH_ENABLED else 'disabled (local/default)'}")
+    print(f"  Upload  : {'password required' if UPLOAD_AUTH_ENABLED else 'no import password'}")
     print("  Privacy : configs stay in your browser; live DNS is opt-in")
     print("  Stop    : Ctrl+C")
     print()

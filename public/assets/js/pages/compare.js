@@ -7,6 +7,7 @@ import { parseZone } from '../dns/zone-parser.js';
 import { getCurrentWorkspace, getHistory, getSnapshot } from '../storage.js';
 import { icon, pill, renderDiff, toast, wireCopyButtons } from '../ui.js';
 import { escapeHTML, formatDateTime, formatNumber, readFileText } from '../utils.js';
+import { ensureUploadUnlocked } from './import-ui.js';
 
 export async function renderCompare(view, query) {
   const workspace = getCurrentWorkspace();
@@ -94,6 +95,10 @@ export async function renderCompare(view, query) {
   view.querySelector('#left-file')?.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!(await ensureUploadUnlocked())) {
+      event.target.value = '';
+      return;
+    }
     leftText = await readFileText(file);
     leftPath = file.name;
     leftInput.value = leftText;
@@ -102,6 +107,10 @@ export async function renderCompare(view, query) {
   view.querySelector('#right-file')?.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!(await ensureUploadUnlocked())) {
+      event.target.value = '';
+      return;
+    }
     rightText = await readFileText(file);
     rightPath = file.name;
     rightInput.value = rightText;

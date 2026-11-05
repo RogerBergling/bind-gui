@@ -111,6 +111,7 @@ def check_readme() -> None:
         "MIT",
         "Limitations",
         "Password protection",
+        "Import/upload password",
     ]
     for section in required_sections:
         if section.lower() not in text.lower():
@@ -176,6 +177,9 @@ def check_start_py() -> None:
         "list_directory",
         "--no-browser",
         "BIND_WORKBENCH_PASSWORD",
+        "BIND_WORKBENCH_UPLOAD_PASSWORD",
+        "/api/upload-auth",
+        "/api/upload-status",
         "hmac.compare_digest",
         "HttpOnly",
         "SameSite=Strict",

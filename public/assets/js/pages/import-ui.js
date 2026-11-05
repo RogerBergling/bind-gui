@@ -7,6 +7,139 @@ import { toast, openModal } from '../ui.js';
 import { icon } from '../ui.js';
 import { escapeHTML } from '../utils.js';
 
+const UPLOAD_UNLOCK_KEY = 'bind-workbench:upload-unlocked';
+let uploadStatusPromise = null;
+let uploadUnlockPromise = null;
+let uploadUnlockedThisPage = false;
+
+export async function getUploadStatus() {
+  if (!uploadStatusPromise) {
+    uploadStatusPromise = fetch('/api/upload-status', { cache: 'no-store', credentials: 'same-origin' })
+      .then((response) => (response.ok ? response.json() : { required: false }))
+      .catch(() => ({ required: false }));
+  }
+  return uploadStatusPromise;
+}
+
+function hasUploadUnlock() {
+  if (uploadUnlockedThisPage) return true;
+  try {
+    return sessionStorage.getItem(UPLOAD_UNLOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberUploadUnlock() {
+  uploadUnlockedThisPage = true;
+  try {
+    sessionStorage.setItem(UPLOAD_UNLOCK_KEY, '1');
+  } catch {
+    /* Session storage may be disabled; keep the in-memory unlock for this page. */
+  }
+}
+
+export function clearUploadUnlock() {
+  uploadUnlockedThisPage = false;
+  try {
+    sessionStorage.removeItem(UPLOAD_UNLOCK_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Ask for the server-side import password before any local file is read.
+ * The password is sent only to /api/upload-auth and is not stored.
+ */
+export async function ensureUploadUnlocked() {
+  if (hasUploadUnlock()) return true;
+  const status = await getUploadStatus();
+  if (!status?.required) return true;
+  if (uploadUnlockPromise) return uploadUnlockPromise;
+
+  uploadUnlockPromise = new Promise((resolve) => {
+    let settled = false;
+    const finish = (value, close) => {
+      if (settled) return;
+      settled = true;
+      if (close) close();
+      resolve(value);
+      uploadUnlockPromise = null;
+    };
+    const { dialog, close } = openModal({
+      title: 'Import password required',
+      lede: 'This deployment requires a password before configuration files can be read. The check is server-side; the password is not stored in the browser.',
+      body: `<div class="form-grid">
+        <label class="field span-2"><span>Import password</span><input id="upload-auth-password" type="password" autocomplete="current-password" spellcheck="false" autofocus><small>${status.separatePassword ? 'Protects only the import action.' : 'The server is using the app password for this import check.'}</small></label>
+      </div>
+      <div class="login-error" id="upload-auth-error" role="alert" hidden></div>`,
+      actions: `<button class="btn btn-ghost" type="button" data-modal-close>Cancel</button><button class="btn btn-primary" type="button" id="upload-auth-submit">${icon('lock', 15)} Unlock import</button>`,
+      onMount: (mountedDialog) => {
+        const input = mountedDialog.querySelector('#upload-auth-password');
+        const errorNode = mountedDialog.querySelector('#upload-auth-error');
+        const submit = mountedDialog.querySelector('#upload-auth-submit');
+        const showError = (message) => {
+          errorNode.textContent = message;
+          errorNode.hidden = false;
+        };
+        const attempt = async () => {
+          const password = input.value;
+          if (!password) {
+            showError('Enter the import password.');
+            input.focus();
+            return;
+          }
+          errorNode.hidden = true;
+          submit.disabled = true;
+          submit.textContent = 'Checking…';
+          try {
+            const response = await fetch('/api/upload-auth', {
+              method: 'POST',
+              credentials: 'same-origin',
+              cache: 'no-store',
+              headers: { 'X-Bind-Upload-Password': password },
+            });
+            let data = {};
+            try {
+              data = await response.json();
+            } catch {
+              /* keep the status-code message */
+            }
+            if (response.ok && data.ok) {
+              rememberUploadUnlock();
+              toast('Import unlocked for this tab.', 'ok');
+              finish(true, close);
+              return;
+            }
+            if (response.status === 429) showError('Too many attempts. Wait a minute and try again.');
+            else if (response.status === 401) showError('Invalid import password.');
+            else showError(data.error || `Import unlock failed (HTTP ${response.status}).`);
+            input.select();
+          } catch {
+            showError('Could not reach the server to verify the import password.');
+          } finally {
+            submit.disabled = false;
+            submit.textContent = 'Unlock import';
+          }
+        };
+        submit.addEventListener('click', attempt);
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            attempt();
+          }
+        });
+        setTimeout(() => input.focus(), 50);
+        mountedDialog.addEventListener('close', () => finish(false));
+      },
+    });
+    void dialog;
+    void close;
+  });
+  return uploadUnlockPromise;
+}
+
 async function collectEntry(entry, prefix, files) {
   if (!entry) return;
   if (entry.isFile) {
@@ -112,6 +245,7 @@ export function wireImportControls(root, options = {}) {
     fileInput.addEventListener('change', async () => {
       const files = Array.from(fileInput.files || []);
       fileInput.value = '';
+      if (!(await ensureUploadUnlocked())) return;
       await handleImport(files, options);
     });
     root.append(fileInput);
@@ -126,6 +260,7 @@ export function wireImportControls(root, options = {}) {
     folderInput.addEventListener('change', async () => {
       const files = Array.from(folderInput.files || []);
       folderInput.value = '';
+      if (!(await ensureUploadUnlocked())) return;
       await handleImport(files, options);
     });
     root.append(folderInput);
@@ -172,6 +307,7 @@ export function wireImportControls(root, options = {}) {
     zone.addEventListener('drop', async (event) => {
       stop(event);
       zone.classList.remove('dragging');
+      if (!(await ensureUploadUnlocked())) return;
       const files = await filesFromDataTransfer(event.dataTransfer);
       if (files.length) await handleImport(files, options);
     });
