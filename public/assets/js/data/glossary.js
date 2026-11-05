@@ -53,6 +53,8 @@ export const GLOSSARY = [
   { term: 'Negative caching', aliases: ['NXDOMAIN caching'], definition: 'Caching of NXDOMAIN and NODATA answers, bounded by the SOA minimum and the negative TTL.', learn: 'soa-ns-ttl' },
   { term: 'NSEC', aliases: [], definition: 'A DNSSEC denial-of-existence record that links names in canonical order. It exposes zone names to walking.', learn: 'dnssec-operations' },
   { term: 'NSEC3', aliases: [], definition: 'A hashed DNSSEC denial-of-existence mechanism that makes zone walking harder but costs CPU.', learn: 'dnssec-operations' },
+  { term: 'NSEC3PARAM', aliases: [], definition: 'The apex record that publishes the NSEC3 hash algorithm, flags, iteration count and salt used by a zone. The audit compares it with the NSEC3 records it retrieves.', learn: 'dnssec-operations' },
+  { term: 'NXNAME', aliases: ['compact denial'], definition: 'A meta-type used by compact denial of existence (RFC 9824). It can appear in an NSEC type bitmap to indicate NXDOMAIN without a full traditional NSEC chain.', learn: 'dnssec-chain' },
   { term: 'NODATA', aliases: ['NOERROR/NODATA'], definition: 'A response saying the name exists but the requested type does not. It is different from NXDOMAIN.', learn: 'dns-mental-model' },
   { term: 'NXDOMAIN', aliases: ['name does not exist'], definition: 'A response saying the queried name does not exist in the zone.', learn: 'dns-mental-model' },
   { term: 'Open resolver', aliases: ['open recursion'], definition: 'A resolver that answers recursive queries from arbitrary clients. It is an abuse and security risk.', learn: 'recursion-security' },

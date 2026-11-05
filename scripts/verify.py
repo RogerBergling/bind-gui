@@ -173,7 +173,7 @@ def check_docker() -> None:
             fail(f"Dockerfile is missing {term!r}")
     if "ADD http" in dockerfile:
         fail("Dockerfile must not fetch remote artifacts with ADD")
-    for term in ["read_only: true", "cap_drop:", "no-new-privileges:true", "8005:8080"]:
+    for term in ["read_only: true", "cap_drop:", "no-new-privileges:true", "8005:8005"]:
         if term not in compose:
             fail(f"compose.yaml is missing {term!r}")
     if "/var/run/docker.sock" in compose:

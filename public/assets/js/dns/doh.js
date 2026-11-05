@@ -243,7 +243,7 @@ export function digTraceCommand(name, type = 'A') {
 
 export function explainDohLimits() {
   return [
-    'A browser cannot open UDP or TCP port 53, so this app uses DNS-over-HTTPS JSON endpoints.',
+    'A browser has no raw UDP/TCP socket API and cannot send a DNS packet to port 53. JavaScript cannot open a classic resolver socket, so this app uses DNS-over-HTTPS JSON endpoints.',
     'The queried name and type are sent to the selected resolver. Configuration files never leave the browser.',
     'Recursive resolvers return cached answers. TTLs shrink while cached and load-balanced records may differ by location.',
     'DoH JSON is a convenience API, not a replacement for authoritative testing with dig, delv or named-checkzone.',

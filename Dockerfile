@@ -38,9 +38,9 @@ RUN APP_VERSION="$APP_VERSION" IMAGE_TAG="$IMAGE_TAG" GIT_SHA="$GIT_SHA" BUILD_D
 
 USER 10001:10001
 
-EXPOSE 8080
+EXPOSE 8005
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD ["python3", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:8080/', timeout=2).read()"]
+  CMD ["python3", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:8005/', timeout=2).read()"]
 
-CMD ["python3", "start.py", "--host", "0.0.0.0", "--port", "8080", "--no-browser"]
+CMD ["python3", "start.py", "--host", "0.0.0.0", "--port", "8005", "--no-browser"]

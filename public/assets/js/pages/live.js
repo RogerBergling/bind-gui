@@ -9,6 +9,7 @@ import {
   resolverById,
 } from '../dns/doh.js';
 import { chainDigCommands, walkDnssecChain } from '../dns/dnssec.js';
+import { auditDigCommands, auditDnssec } from '../dns/dnssec-audit.js';
 import { buildVerificationChecks, runVerification, summarizeVerification, verificationCaveats } from '../dns/verify.js';
 import { parseWorkspace } from '../dns/workspace.js';
 import { getCurrentWorkspace, getSettings, saveSettings } from '../storage.js';
@@ -21,10 +22,11 @@ export async function renderLive(view, query) {
   const model = workspace ? parseWorkspace(workspace) : null;
   const settings = getSettings();
   let consent = Boolean(settings.onlineConsent);
-  let activeTab = ['lookup', 'dnssec', 'verify', 'how'].includes(query.get('tab')) ? query.get('tab') : 'lookup';
+  let activeTab = ['lookup', 'dnssec', 'audit', 'verify', 'how'].includes(query.get('tab')) ? query.get('tab') : 'lookup';
   let lookupResults = null;
   let lookupComparison = null;
   let chainResult = null;
+  let auditResult = null;
   let verificationResults = null;
   let verificationSummary = null;
   let busy = false;
@@ -47,6 +49,7 @@ export async function renderLive(view, query) {
   <div class="tabbar" role="tablist">
     <button class="tab" type="button" role="tab" data-live-tab="lookup" aria-selected="${activeTab === 'lookup'}">${icon('search', 15)} Lookup</button>
     <button class="tab" type="button" role="tab" data-live-tab="dnssec" aria-selected="${activeTab === 'dnssec'}">${icon('shield', 15)} DNSSEC chain</button>
+    <button class="tab" type="button" role="tab" data-live-tab="audit" aria-selected="${activeTab === 'audit'}">${icon('activity', 15)} DNSSEC audit</button>
     <button class="tab" type="button" role="tab" data-live-tab="verify" aria-selected="${activeTab === 'verify'}">${icon('check', 15)} Zone verification</button>
     <button class="tab" type="button" role="tab" data-live-tab="how" aria-selected="${activeTab === 'how'}">${icon('book', 15)} How it works</button>
   </div>
@@ -81,7 +84,19 @@ export async function renderLive(view, query) {
       <div class="query-actions"><button class="btn btn-primary" type="button" id="run-chain" ${consent ? '' : 'disabled'}>${icon('shield', 15)} Walk the chain</button><span class="muted-note" id="chain-status">${consent ? 'Ready.' : 'Enable online lookups first.'}</span></div>
     </div>
     <div id="chain-output">${chainResult ? renderChain(chainResult) : `<div class="empty-panel"><h2>No chain walked yet</h2><p>Start at a name or zone. The tool queries the resolver’s DS and DNSKEY answers and recomputes the DS digest locally.</p></div>`}</div>
-    <div class="callout warn">${icon('warning', 18)}<div><strong>What this proves</strong><p>The AD flag is the resolver’s validation result. The digest match proves that the parent DS commits to the child DNSKEY. This page does not re-implement RRSIG signature verification; use <code>delv</code>, your own validating resolver and <code>named-checkds</code> for the final DNSSEC gate.</p></div></div>
+    <div class="callout warn">${icon('warning', 18)}<div><strong>What this proves</strong><p>The AD flag is the resolver’s validation result. The digest match proves that the parent DS commits to the child DNSKEY. The full audit tab adds NSEC3PARAM/NSEC3 proof checks and cryptographic RRSIG verification for common algorithms. For the final gate, still use <code>delv</code>, your own validating resolver and <code>named-checkds</code>.</p></div></div>
+  </section>
+
+  <section class="live-panel" data-live-panel="audit" ${activeTab === 'audit' ? '' : 'hidden'}>
+    <div class="query-card">
+      <div class="query-grid">
+        <label class="field span-2"><span>Name or zone</span><input id="audit-name" type="text" value="${escapeHTML(initialName)}" placeholder="example.com" autocomplete="off" spellcheck="false"><small>A DNSViz-style audit using DoH: chain, DS↔DNSKEY, DNSKEY/SOA/NS signatures, NSEC3PARAM, NSEC3/NSEC denial proof, algorithms and RRSIG timing.</small></label>
+        <label class="field"><span>Resolver</span><select id="audit-resolver" class="select">${RESOLVER_LIST.map((resolver) => `<option value="${resolver.id}">${escapeHTML(resolver.name)} · ${resolver.address}</option>`).join('')}</select></label>
+        <label class="field"><span>What is tested</span><div class="readonly-note">DS, DNSKEY, RRSIG (cryptographic verify where WebCrypto supports it), NSEC3PARAM, NSEC3 hash + coverage, NSEC coverage, AD, RRSIG expiry/key tag/signer.</div></label>
+      </div>
+      <div class="query-actions"><button class="btn btn-primary" type="button" id="run-audit" ${consent ? '' : 'disabled'}>${icon('activity', 15)} Run DNSSEC audit</button><span class="muted-note" id="audit-status">${consent ? 'Ready.' : 'Enable online lookups first.'}</span></div>
+    </div>
+    <div id="audit-output">${auditResult ? renderAudit(auditResult) : `<div class="empty-panel"><h2>No DNSSEC audit yet</h2><p>Run the audit to check the full chain, signatures, NSEC3PARAM/NSEC3 parameters and denial-of-existence proof, plus cryptographic RRSIG validation for supported algorithms.</p></div>`}</div>
   </section>
 
   <section class="live-panel" data-live-panel="verify" ${activeTab === 'verify' ? '' : 'hidden'}>
@@ -110,6 +125,7 @@ export async function renderLive(view, query) {
   view.querySelector('#verify-resolver')?.setAttribute('value', settings.resolver === 'google' ? 'google' : 'cloudflare');
   if (view.querySelector('#verify-resolver')) view.querySelector('#verify-resolver').value = settings.resolver === 'google' ? 'google' : 'cloudflare';
   if (chainResult) view.querySelector('#chain-resolver').value = settings.resolver === 'google' ? 'google' : 'cloudflare';
+  if (view.querySelector('#audit-resolver')) view.querySelector('#audit-resolver').value = settings.resolver === 'google' ? 'google' : 'cloudflare';
   wireCopyButtons(view);
 
   view.querySelectorAll('[data-live-tab]').forEach((button) => {
@@ -161,11 +177,11 @@ export async function renderLive(view, query) {
         updateConsentUi();
       });
     }
-    ['#run-lookup', '#run-chain', '#run-verify'].forEach((selector) => {
+    ['#run-lookup', '#run-chain', '#run-audit', '#run-verify'].forEach((selector) => {
       const button = view.querySelector(selector);
       if (button) button.disabled = !consent;
     });
-    ['#lookup-status', '#chain-status', '#verify-status'].forEach((selector) => {
+    ['#lookup-status', '#chain-status', '#audit-status', '#verify-status'].forEach((selector) => {
       const node = view.querySelector(selector);
       if (node && !busy) node.textContent = consent ? 'Ready.' : 'Enable online lookups first.';
     });
@@ -243,6 +259,32 @@ export async function renderLive(view, query) {
     } finally {
       busy = false;
       setBusy('#run-chain', false, `${icon('shield', 15)} Walk the chain`);
+    }
+  });
+
+  view.querySelector('#run-audit')?.addEventListener('click', async () => {
+    if (!requireConsent() || busy) return;
+    const name = view.querySelector('#audit-name').value.trim();
+    const resolver = view.querySelector('#audit-resolver').value;
+    if (!name) return;
+    saveSettings({ resolver });
+    busy = true;
+    clearAbort();
+    abortController = new AbortController();
+    setBusy('#run-audit', true, 'Auditing DNSSEC…');
+    setStatus('#audit-status', 'Walking the chain, querying DNSKEY/SOA/NS, testing NSEC3PARAM/NSEC3 or NSEC denial and verifying signatures…');
+    view.querySelector('#audit-output').innerHTML = `<div class="empty-panel"><span class="spinner"></span><h2>Auditing ${escapeHTML(name)}</h2><p>Chain, keys, signatures, NSEC3PARAM/NSEC3/NSEC and denial proof…</p></div>`;
+    try {
+      auditResult = await auditDnssec(name, resolver, { signal: abortController.signal });
+      view.querySelector('#audit-output').innerHTML = auditResult?.ok ? renderAudit(auditResult) : `<div class="callout danger">${icon('error', 18)}<div><strong>DNSSEC audit failed</strong><p>${escapeHTML(auditResult?.error || 'Unknown error')}</p></div></div>`;
+      wireCopyButtons(view);
+      setStatus('#audit-status', auditResult?.ok ? `Audit complete: ${auditResult.overall}. ${auditResult.checks.filter((check) => check.status === 'pass').length} passed, ${auditResult.checks.filter((check) => check.status === 'fail').length} failed.` : (auditResult?.error || 'Failed.'));
+    } catch (error) {
+      setStatus('#audit-status', error?.message || 'DNSSEC audit failed.');
+      toast(error?.message || 'Could not run the DNSSEC audit.', 'danger');
+    } finally {
+      busy = false;
+      setBusy('#run-audit', false, `${icon('activity', 15)} Run DNSSEC audit`);
     }
   });
 
@@ -422,9 +464,123 @@ function displayValue(value) {
   return String(value);
 }
 
+function renderAudit(audit) {
+  const tone = audit.overall === 'secure' ? 'ok' : audit.overall === 'bogus' ? 'danger' : 'warn';
+  const label = {
+    secure: 'Secure — chain, signatures and denial checks passed',
+    insecure: 'Insecure — the delegation is not signed',
+    bogus: 'Bogus — a key, signature or denial proof failed',
+    review: 'Review — the audit found warnings or missing evidence',
+    unknown: 'Unknown — not enough evidence',
+  }[audit.overall] || audit.overall;
+  const counts = { pass: 0, warn: 0, fail: 0, info: 0 };
+  for (const check of audit.checks) counts[check.status] = (counts[check.status] || 0) + 1;
+  const mode = audit.denial?.mode || 'none';
+  const signaturePass = audit.signatures.filter((item) => item.status === 'pass').length;
+  const signatureFail = audit.signatures.filter((item) => ['fail', 'no-key', 'missing'].includes(item.status)).length;
+  return `<div class="audit-overall ${tone}">
+    ${icon(audit.overall === 'secure' ? 'shield' : audit.overall === 'bogus' ? 'error' : 'warning', 24)}
+    <div><span class="eyebrow">DNSSEC audit · ${escapeHTML(audit.apex)}</span><h2>${escapeHTML(label)}</h2><p>${escapeHTML(resolverById(audit.resolver).name)} · ${escapeHTML(formatDateTime(audit.checkedAt))} · denial mode ${escapeHTML(mode)} · ${escapeHTML(String(audit.keys.length))} DNSKEY · ${escapeHTML(String(audit.dsRecords.length))} DS</p></div>
+    ${pill(audit.overall, tone, audit.overall === 'secure' ? 'check' : 'warning')}
+  </div>
+  <div class="audit-stats">
+    <div><strong>${counts.pass || 0}</strong><span>passed</span></div>
+    <div><strong>${counts.warn || 0}</strong><span>warnings</span></div>
+    <div><strong>${counts.fail || 0}</strong><span>failed</span></div>
+    <div><strong>${signaturePass}/${audit.signatures.length}</strong><span>RRSIG verified</span></div>
+    <div><strong>${audit.denial?.mode || 'none'}</strong><span>denial mode</span></div>
+    <div><strong>${audit.keys.length}</strong><span>DNSKEY</span></div>
+  </div>
+  <div class="audit-grid">
+    <div class="audit-checks">
+      <div class="section-head small"><h2>Audit checks</h2><p>What was tested and what the evidence shows.</p></div>
+      ${audit.checks.map(renderAuditCheck).join('')}
+    </div>
+    <div class="audit-side">
+      <div class="fact">${icon('network', 18)}<div><strong>Chain</strong><span>${escapeHTML(audit.chain.overall)} · ${audit.chain.chain.length} delegation level(s)</span></div></div>
+      <div class="fact">${icon('key', 18)}<div><strong>Keys</strong><span>${audit.keys.map((key) => `${key.keyTag}/${key.flags === 257 ? 'KSK' : 'ZSK'}/${algorithmInfoName(key.algorithm)}`).join(' · ') || 'none'}</span></div></div>
+      <div class="fact">${icon('shield', 18)}<div><strong>Signatures</strong><span>${signaturePass} cryptographic pass · ${signatureFail} fail</span></div></div>
+      <div class="fact">${icon('database', 18)}<div><strong>Denial</strong><span>${escapeHTML(mode)} with ${audit.denial?.mode === 'NSEC3' ? `${audit.denial.authorityNsec3.length} authority NSEC3` : `${audit.denial?.authorityNsec?.length || 0} authority NSEC`}</span></div></div>
+    </div>
+  </div>
+  ${renderDenialAudit(audit)}
+  ${renderSignatureAudit(audit)}
+  ${renderAuditEvidence(audit)}
+  <div class="section-head small"><h2>Reproduce and go deeper</h2><p>DoH is a resolver view. Confirm with dig/delv against the resolver or authoritative servers.</p></div>
+  ${codeBlock(auditDigCommands(audit, audit.resolver).join('\n'), { label: 'DNSSEC audit commands' })}
+  <div class="callout info">${icon('info', 18)}<div><strong>What this audit can and cannot prove</strong><p>It queries the resolver’s DS, DNSKEY, DNSKEY/SOA/NS/NSEC3/NSEC signatures, NSEC3PARAM, NSEC3 hashes and denial evidence. It verifies common RRSIG algorithms with WebCrypto (RSA/SHA-256, RSA/SHA-512, ECDSA P-256/P-384, Ed25519 where supported). It cannot perform AXFR, raw UDP/TCP queries, or prove a full closest-encloser/wildcard proof in every edge case; use <code>delv</code> and a local validating resolver for the final gate.</p></div></div>
+  `;
+}
+
+function algorithmInfoName(code) {
+  return { 5: 'RSASHA1', 7: 'RSASHA1-NSEC3', 8: 'RSASHA256', 10: 'RSASHA512', 13: 'ECDSAP256', 14: 'ECDSAP384', 15: 'ED25519', 16: 'ED448' }[Number(code)] || `ALG${code}`;
+}
+
+function renderAuditCheck(check) {
+  const tone = check.status === 'pass' ? 'ok' : check.status === 'fail' ? 'danger' : check.status === 'warn' ? 'warn' : 'accent';
+  return `<div class="audit-check ${tone}">
+    <div class="check-icon ${tone}">${icon(check.status === 'pass' ? 'check' : check.status === 'fail' ? 'error' : check.status === 'warn' ? 'warning' : 'info', 15)}</div>
+    <div class="audit-check-copy"><div class="check-title"><strong>${escapeHTML(check.title)}</strong>${pill(check.status, tone)}</div><p>${escapeHTML(check.summary)}</p>${check.details?.length ? `<details><summary>Evidence</summary><ul>${check.details.map((item) => `<li>${escapeHTML(item)}</li>`).join('')}</ul></details>` : ''}</div>
+  </div>`;
+}
+
+function renderDenialAudit(audit) {
+  const denial = audit.denial;
+  if (!denial) return '';
+  if (denial.mode === 'NSEC3') {
+    return `<div class="audit-detail-card">
+      <div class="section-head small"><h2>${icon('lock', 17)} NSEC3PARAM and NSEC3 proof</h2><p>Hashed denial of existence. The random name hash is computed locally and compared with the authority proof.</p></div>
+      <div class="audit-params">
+        <div><span>Hash algorithm</span><strong>${escapeHTML(String(denial.nsec3param?.hashAlgorithm ?? '?'))}</strong><small>1 = SHA-1</small></div>
+        <div><span>Iterations</span><strong>${escapeHTML(String(denial.nsec3param?.iterations ?? '?'))}</strong><small>0 recommended</small></div>
+        <div><span>Salt</span><strong class="mono">${escapeHTML(denial.nsec3param?.salt ?? '?')}</strong><small>hex / -</small></div>
+        <div><span>Flags</span><strong>${escapeHTML(String(denial.nsec3param?.flags ?? '?'))}</strong><small>0 expected</small></div>
+        <div><span>Random name</span><strong class="mono">${escapeHTML(denial.randomName)}</strong></div>
+        <div><span>Computed hash</span><strong class="mono">${escapeHTML(denial.hash?.base32 || '—')}</strong><small>${escapeHTML(denial.hash?.bytes?.slice(0, 32) || '')}…</small></div>
+      </div>
+      ${denial.exactNsec3 ? `<div class="callout ok">${icon('check', 18)}<div><strong>Exact NSEC3 returned</strong><p>${escapeHTML(denial.exactNsec3.owner)} → ${escapeHTML(denial.exactNsec3.nextHashed)} · ${escapeHTML(denial.exactNsec3.raw)}</p></div></div>` : `<div class="callout info">${icon('info', 18)}<div><strong>No exact NSEC3 owner returned</strong><p>The resolver supplied covering NSEC3 records in the authority section instead. That is normal for a non-existent name; the covering hash is checked below.</p></div></div>`}
+      <div class="table-scroll"><table class="record-table compact"><thead><tr><th>NSEC3 owner</th><th>Next hashed owner</th><th>Hash</th><th>Iterations</th><th>Salt</th><th>Types</th></tr></thead><tbody>${denial.authorityNsec3.map((item) => `<tr><td><code>${escapeHTML(item.owner)}</code></td><td><code>${escapeHTML(item.nextHashed)}</code></td><td>${escapeHTML(String(item.hashAlgorithm))}</td><td>${escapeHTML(String(item.iterations))}</td><td class="mono">${escapeHTML(item.salt)}</td><td><code>${escapeHTML(item.types.join(' '))}</code></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No authority NSEC3 records.</td></tr>'}</tbody></table></div>
+      <p class="muted-note">${icon('info', 14)} The audit verifies the NSEC3 signature and checks that one authority NSEC3 covers the computed hash. It does not claim to reproduce every closest-encloser and wildcard branch of RFC 5155.</p>
+    </div>`;
+  }
+  if (denial.mode === 'NSEC') {
+    return `<div class="audit-detail-card">
+      <div class="section-head small"><h2>${icon('lock', 17)} NSEC denial proof</h2><p>Canonical name ordering. The random name must fall between an NSEC owner and its next name.</p></div>
+      <div class="audit-params"><div><span>Random name</span><strong class="mono">${escapeHTML(denial.randomName)}</strong></div><div><span>NSEC records</span><strong>${denial.authorityNsec.length}</strong></div><div><span>RCODE</span><strong>${escapeHTML(denial.query.rcode)}</strong></div><div><span>AD on negative</span><strong>${denial.query.flags?.ad ? 'set' : 'not set'}</strong></div></div>
+      <div class="table-scroll"><table class="record-table compact"><thead><tr><th>NSEC owner</th><th>Next domain</th><th>Types</th></tr></thead><tbody>${denial.authorityNsec.map((item) => `<tr><td><code>${escapeHTML(item.owner)}</code></td><td><code>${escapeHTML(item.next)}</code></td><td><code>${escapeHTML(item.types.join(' '))}</code></td></tr>`).join('') || '<tr><td colspan="3" class="muted">No authority NSEC records.</td></tr>'}</tbody></table></div>
+      <p class="muted-note">${icon('info', 14)} Compact denial (NXNAME, RFC 9824) may return an NSEC at the queried owner with the NXNAME type. The audit accepts that as an NXDOMAIN indicator when the resolver’s answer is consistent.</p>
+    </div>`;
+  }
+  return `<div class="callout warn">${icon('warning', 18)}<div><strong>No denial mechanism found</strong><p>No NSEC3PARAM, NSEC3 or NSEC records were present in the authority evidence. The zone may be unsigned, or the resolver may not return DNSSEC proof records through its JSON API.</p></div></div>`;
+}
+
+function renderSignatureAudit(audit) {
+  if (!audit.signatures?.length) return '';
+  return `<div class="audit-detail-card"><div class="section-head small"><h2>${icon('shield', 17)} RRSIG verification</h2><p>Cryptographic verification uses the published DNSKEY and canonical RRset data. Unsupported algorithms are reported, not silently accepted.</p></div>
+    <div class="table-scroll"><table class="record-table compact"><thead><tr><th>RRset</th><th>Status</th><th>Algorithm / method</th><th>Key tag</th><th>Expires</th></tr></thead><tbody>${audit.signatures.map((item) => `<tr><td><code>${escapeHTML(item.owner)}</code> <span class="record-type">${escapeHTML(item.type)}</span></td><td><span class="pill ${item.status === 'pass' ? 'ok' : item.status === 'unsupported' ? 'neutral' : 'danger'}">${escapeHTML(item.status)}</span></td><td>${escapeHTML(item.method || item.error || '—')}</td><td class="mono">${escapeHTML(String(item.rrsig?.keyTag ?? '—'))}</td><td class="mono">${item.rrsig?.expiration ? escapeHTML(formatDateTime(new Date(item.rrsig.expiration * 1000))) : '—'}</td></tr>`).join('')}</tbody></table></div>
+    ${audit.signatures.some((item) => item.status === 'unsupported') ? `<p class="muted-note">${icon('info', 14)} Some signatures use algorithms WebCrypto cannot verify in this browser. They remain unverified; use delv.</p>` : ''}
+  </div>`;
+}
+
+function renderAuditEvidence(audit) {
+  const labels = { soa: 'SOA', ns: 'NS', dnskey: 'DNSKEY', ds: 'DS (parent)', nsec3param: 'NSEC3PARAM', nsec: 'NSEC', a: 'A', aaaa: 'AAAA', mx: 'MX', caa: 'CAA', txt: 'TXT', denial: 'Random-name denial' };
+  return `<div class="audit-detail-card"><div class="section-head small"><h2>${icon('database', 17)} Raw evidence</h2><p>Exactly what the resolver returned. Flags are shown per query; AD on negative answers is resolver-dependent.</p></div>
+    <div class="audit-evidence">${Object.entries(labels).map(([key, label]) => {
+      const query = audit.queries[key];
+      if (!query) return '';
+      const rows = [...(query.answers || []), ...(query.authority || [])];
+      return `<details class="evidence-card" ${key === 'denial' ? 'open' : ''}>
+        <summary><span>${escapeHTML(label)}</span>${pill(query.rcode || '—', query.rcode === 'NOERROR' ? 'ok' : query.rcode === 'NXDOMAIN' ? 'warn' : 'danger')}${query.flags?.ad ? pill('AD', 'ok', 'shield') : pill('no AD', 'neutral', 'shield')}<span class="muted">${rows.length} records</span></summary>
+        <div class="table-scroll"><table class="record-table compact"><thead><tr><th>Section</th><th>Name</th><th>Type</th><th>TTL</th><th>Data</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHTML(row.section || '')}</td><td><code>${escapeHTML(row.name)}</code></td><td><span class="record-type">${escapeHTML(row.type)}</span></td><td class="mono">${formatNumber(row.ttl)}</td><td class="record-data"><code>${escapeHTML(row.data)}</code></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No records.</td></tr>'}</tbody></table></div>
+      </details>`;
+    }).join('')}</div>
+  </div>`;
+}
+
 function renderHowItWorks() {
   const article = articleById('live-dns-dig');
   return `<div class="learn-config-intro"><div><span class="eyebrow">How it works</span><h2>Browsers cannot run dig</h2><p>This page uses DNS-over-HTTPS JSON from Cloudflare and Google. That is a real DNS query, but it is a recursive resolver’s view, not authoritative truth. Read the flags, compare resolvers and then verify with dig/delv.</p></div><div class="learn-config-stats"><div><strong>DoH</strong><span>transport</span></div><div><strong>AD</strong><span>validation flag</span></div><div><strong>DS</strong><span>parent trust</span></div><div><strong>dig</strong><span>terminal truth</span></div></div></div>
   ${article ? article.sections.map((section) => `<section class="doc-section" id="${escapeHTML(section.id)}"><h2>${escapeHTML(section.title)}</h2>${section.html}</section>`).join('') : ''}
+  <div class="callout warn">${icon('warning', 18)}<div><strong>Why not UDP/53?</strong><p>A web page has no raw UDP or TCP socket API, so JavaScript cannot send a classic DNS query to port 53. Browsers only expose HTTP(S), WebSocket and a few higher-level transports. The app therefore uses DNS-over-HTTPS JSON, which is a real DNS lookup but a recursive resolver’s view. To test UDP/TCP 53, authoritative servers, AXFR or TSIG, copy the generated <code>dig</code>/<code>delv</code> commands and run them from a host with network access. A server-side query endpoint would remove that limitation, but it would also add an upload/query API and a much larger attack surface to this otherwise static container.</p></div></div>
   <div class="callout info">${icon('info', 18)}<div><strong>Why only Cloudflare and Google?</strong><p>The container’s Content-Security-Policy allows only these two DoH origins. A custom resolver would require changing the CSP and the container build, which is intentionally not a click-away action.</p></div></div>`;
 }

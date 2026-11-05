@@ -61,6 +61,7 @@ export const DNS_TYPES = [
   ['CDS', 59],
   ['CDNSKEY', 60],
   ['OPENPGPKEY', 61],
+  ['NXNAME', 128],
   ['CSYNC', 62],
   ['ZONEMD', 63],
   ['SVCB', 64],

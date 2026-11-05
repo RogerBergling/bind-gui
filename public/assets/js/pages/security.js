@@ -97,7 +97,7 @@ Cache-Control: no-store, no-cache, must-revalidate, max-age=0`, { label: 'HTTP s
     <p>Put the container behind an HTTPS reverse proxy you control. The static server does not encrypt transport. The included Compose file binds the published port to <code>127.0.0.1</code> by default; change it deliberately if remote access is intended. Keep the image updated and review the Dockerfile and workflow. Do not add an upload API just to make the demo convenient.</p>
     ${codeBlock(`# Local-only compose binding example
 ports:
-  - "127.0.0.1:8005:8080"`, { label: 'compose port binding', copy: true })}
+  - "127.0.0.1:8005:8005"`, { label: 'compose port binding', copy: true })}
     <div class="callout info">${icon('info', 18)}<div><strong>No warranty</strong><p>MIT licensed software provided as-is. This is an independent tool, not official BIND or ISC software. The analyzer and guides complement, but never replace, <code>named-checkconf</code>, <code>named-checkzone</code>, <code>dig</code>/<code>delv</code>, the BIND ARM and a tested deployment process.</p></div></div>
   </section>
   `;

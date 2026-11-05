@@ -70,6 +70,10 @@ Everything except the explicit DoH queries runs locally in the browser.
 | --- | --- |
 | [![Live DNS](docs/screenshots/live.png)](docs/screenshots/live.png) | [![DNSSEC chain](docs/screenshots/dnssec.png)](docs/screenshots/dnssec.png) |
 
+| DNSSEC audit (NSEC3PARAM + RRSIG) | |
+| --- | --- |
+| [![DNSSEC audit](docs/screenshots/audit.png)](docs/screenshots/audit.png) | |
+
 | Learn | |
 | --- | --- |
 | [![Learning](docs/screenshots/learn.png)](docs/screenshots/learn.png) | |
@@ -136,9 +140,14 @@ Capabilities:
 - Generate copy-ready `dig` commands for the exact query, including `+dnssec`, `+multi`, `+cd`, `+trace`, `+norecurse` and `-x`.
 - Verify imported zone records against live answers: expected vs observed, missing/unexpected values, NXDOMAIN/NODATA and AD status.
 - **DNSSEC chain walk**: find the zone apex with SOA, query DS and DNSKEY at each delegation to the root, recompute the DS digest locally (SHA-1/SHA-256/SHA-384), match key tags and algorithms, and show the resolver’s AD result.
-- Long-form explanations of what AD, CD, DS, DNSKEY, RRSIG, NSEC/NSEC3 and `delv` actually mean.
+- **DNSSEC audit (DNSViz-style)**: explicit `NSEC3PARAM`, locally computed NSEC3 hashes and base32hex owner names, NSEC3/NSEC denial coverage for a random non-existent name, RRSIG signer/key-tag/expiry checks, and cryptographic RRSIG verification for RSA/SHA-256, RSA/SHA-512, ECDSA P-256/P-384 and Ed25519 where WebCrypto supports it. It also shows the raw SOA/NS/DNSKEY/DS/NSEC3PARAM/denial evidence and copy-ready `dig`/`delv` commands.
+- Long-form explanations of what AD, CD, DS, DNSKEY, RRSIG, NSEC/NSEC3/NSEC3PARAM and `delv` actually mean.
 
-The app does **not** re-implement full RRSIG signature verification. The chain page combines the resolver’s validation result with local DS↔DNSKEY digest matching. Use `delv`, your own validating resolver and `named-checkds` for the final DNSSEC gate.
+The app does **not** implement every DNSSEC signature algorithm or every closest-encloser/wildcard edge case. The audit combines the resolver’s validation result, local DS↔DNSKEY digest matching, NSEC3/NSEC coverage checks and cryptographic verification of common algorithms. Use `delv`, your own validating resolver and `named-checkds` for the final DNSSEC gate.
+
+### Why not UDP/53?
+
+A web page has no raw UDP/TCP socket API. JavaScript cannot send a classic DNS packet to port 53, open an AXFR stream or authenticate TSIG. The app therefore uses DNS-over-HTTPS JSON, which is a real DNS lookup but a recursive resolver’s view. For UDP/TCP 53, authoritative queries, AXFR/IXFR, TSIG and `delv`, use the generated commands from a host with network access. A server-side query endpoint would remove this limitation but would turn the static container into a general DNS query proxy, so it is intentionally not included.
 
 ### Export: multiple files, hashes and a validation plan
 
@@ -200,7 +209,7 @@ When you enable online lookups and run a query, the selected resolver sees the *
 
 Read the full model in the app at **Security & privacy** (`#/security`).
 
-**If you expose the container beyond localhost**, change the Compose port mapping to `8005:8080`, place it behind an HTTPS reverse proxy you trust and keep the image updated. The static host does not encrypt traffic between the browser and the server. The default local launcher and the included Compose file both bind to `127.0.0.1`.
+**If you expose the container beyond localhost**, change the Compose port mapping to `8005:8005`, place it behind an HTTPS reverse proxy you trust and keep the image updated. The static host does not encrypt traffic between the browser and the server. The default local launcher and the included Compose file both bind to `127.0.0.1`.
 
 ---
 
@@ -215,7 +224,7 @@ docker compose up -d
 
 Open **http://localhost:8005**.
 
-The included Compose file binds the published port to **127.0.0.1** by default, uses a read-only root filesystem, a small tmpfs, `cap_drop: ALL`, `no-new-privileges`, a 128 MB memory limit and a healthcheck. It does not mount the Docker socket or include Watchtower. To expose it on a LAN, change the port mapping to `8005:8080` and put it behind an HTTPS reverse proxy you control.
+The included Compose file binds the published port to **127.0.0.1** by default, uses a read-only root filesystem, a small tmpfs, `cap_drop: ALL`, `no-new-privileges`, a 128 MB memory limit and a healthcheck. It does not mount the Docker socket or include Watchtower. To expose it on a LAN, change the port mapping to `8005:8005` and put it behind an HTTPS reverse proxy you control.
 
 Update deliberately:
 
@@ -229,7 +238,7 @@ Build the image yourself:
 
 ```sh
 docker build -t bind-workbench:local .
-docker run --rm -p 127.0.0.1:8005:8080 --read-only --cap-drop=ALL \
+docker run --rm -p 127.0.0.1:8005:8005 --read-only --cap-drop=ALL \
   --security-opt=no-new-privileges:true bind-workbench:local
 ```
 
@@ -284,8 +293,8 @@ Unknown directives and record types are preserved. New BIND features can be revi
 
 - **Not a compiler.** Run `named-checkconf -z` and `named-checkzone` with the exact BIND binary and the exact production file paths. The app generates the commands; it cannot run them in the browser.
 - **Not a deployment tool.** It does not SSH, reload, call `rndc` or push to a server.
-- **Live DNS is a resolver view.** Cached answers, GeoDNS, views, anycast and round-robin pools can legitimately differ. DoH is not authoritative truth.
-- **DNSSEC chain checking is partial by design.** The app matches DS digests to DNSKEYs and reports the resolver’s AD result; it does not re-implement every RRSIG algorithm or canonicalisation edge case.
+- **Live DNS uses DoH, not UDP/53.** A browser page has no raw UDP/TCP socket API, so JavaScript cannot send a classic DNS packet to port 53. The app uses DNS-over-HTTPS JSON from Cloudflare/Google and generates the equivalent `dig`/`delv` commands for real 53/853/AXFR/TSIG testing. Cached answers, GeoDNS, views, anycast and round-robin pools can legitimately differ; DoH is not authoritative truth.
+- **DNSSEC checking is deep but not a full validator.** The audit matches DS digests to DNSKEYs, verifies common RRSIG algorithms (RSA/SHA-256, RSA/SHA-512, ECDSA P-256/P-384, Ed25519 where supported), computes NSEC3 hashes and checks NSEC3/NSEC coverage. It does not implement every algorithm, every canonicalisation edge case or a complete closest-encloser/wildcard proof. Use `delv` and a local validating resolver for the final gate.
 - **Static analysis cannot see the host.** File ownership, permissions, SELinux/AppArmor labels, mounts, journals, signed files and systemd sandboxing are outside the browser.
 - **History is local.** Clearing browser data deletes it. Export if it matters.
 - **Web Crypto needs a secure context.** SHA-256 manifest hashes and local DS digest matching use `crypto.subtle`; serve the app from localhost or HTTPS. On plain HTTP over a LAN the core parsing/analysis still works, but those digest features are marked unavailable.

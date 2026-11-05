@@ -983,10 +983,12 @@ delv +vtrace example.com A</code></pre>
 <li>Queries both Cloudflare and Google and highlights propagation differences.</li>
 <li>Recomputes the DS digest against published DNSKEYs.</li>
 <li>Walks the chain from the zone apex to the root.</li>
-<li>Builds checks from your imported zone and compares expected with observed records.</li>
+<li>Runs a DNSViz-style DNSSEC audit: DNSKEY/SOA/NS signatures, RRSIG timing, signer and key-tag checks, NSEC3PARAM, local NSEC3 hash computation and NSEC3/NSEC denial coverage.</li>
+<li>Cryptographically verifies RRSIGs for RSA/SHA-256, RSA/SHA-512, ECDSA P-256/P-384 and Ed25519 where Web Crypto supports them.</li>
+<li>Builds checks from your imported zone and compares expected with observed records, including NSEC3PARAM records.</li>
 <li>Generates copy-ready dig and delv commands.</li>
 </ul>
-<p>None of this proves that your server is correctly configured. It proves what public resolvers currently see. Combine it with authoritative queries, named-checkconf/zone and your own validating resolver.</p>`,
+<p>A browser page has no raw UDP/TCP socket API, so JavaScript cannot send a classic DNS packet to port 53. The app uses DNS-over-HTTPS JSON; use the generated <code>dig</code>/<code>delv</code> commands when you need UDP/TCP 53, AXFR, TSIG or authoritative-server testing. None of this proves that your server is correctly configured; it proves what public resolvers currently see. Combine it with authoritative queries, named-checkconf/zone and your own validating resolver.</p>`,
       },
     ],
   },
