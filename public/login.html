@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unlock · BIND Workbench</title>
+<meta name="description" content="Password-protected BIND Workbench.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#070b14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f7fc" media="(prefers-color-scheme: light)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1220'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%2338bdf8' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2334d399'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body class="login-body">
+<main class="login-shell">
+  <section class="login-card" aria-labelledby="login-title">
+    <a class="brand login-brand" href="/" aria-label="BIND Workbench">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="30" height="30" fill="none">
+          <rect x="1" y="1" width="30" height="30" rx="8" stroke="currentColor" stroke-opacity=".32"/>
+          <circle cx="16" cy="16" r="9" stroke="var(--accent)" stroke-width="1.4"/>
+          <path d="M7 16h18M16 7a16 16 0 0 1 0 18M16 7a16 16 0 0 0 0 18" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2"/>
+          <circle cx="16" cy="16" r="2" fill="var(--ok)"/>
+        </svg>
+      </span>
+      <span class="brand-text"><strong>BIND Workbench</strong><span>DNS config studio</span></span>
+    </a>
+    <span class="eyebrow">Protected workspace</span>
+    <h1 id="login-title">Unlock the workbench</h1>
+    <p class="login-lede">This deployment requires the password configured by the operator. The password is checked server-side; it is never stored in the page or sent with your DNS configuration.</p>
+    <form class="login-form" id="login-form" novalidate>
+      <label class="field">
+        <span>Password</span>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" spellcheck="false" autofocus required>
+      </label>
+      <button class="btn btn-primary btn-lg" id="login-submit" type="submit">Unlock BIND Workbench</button>
+    </form>
+    <div class="login-error" id="login-error" role="alert" hidden></div>
+    <p class="login-note">Configurations remain in this browser. Imports, analysis, history and exports are local. Live DNS queries are separately opt-in.</p>
+  </section>
+  <p class="login-foot">MIT licensed · independent project, not affiliated with ISC · <a href="https://github.com/RogerBergling/bind-gui" target="_blank" rel="noopener noreferrer">Source</a></p>
+</main>
+<script type="module" src="/login.js"></script>
+</body>
+</html>

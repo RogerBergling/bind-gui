@@ -4,14 +4,14 @@ import { icon, pill, callout, codeBlock } from '../ui.js';
 
 export function renderSecurity(view) {
   view.innerHTML = `<div class="page-head">
-    <div class="page-head-copy"><span class="eyebrow">Security &amp; privacy</span><h1>The configuration stays here</h1><p class="page-lede">BIND Workbench is a static browser application with no account, database, upload endpoint or analytics. Parsing, analysis, diffing, history and export run in this tab. This page explains the threat model, the live-DNS exception and what the design does not protect.</p><div class="meta-strip">${pill('no upload API', 'ok', 'lock')}${pill('strict CSP', 'ok', 'shield')}${pill('opt-in DoH', 'warn', 'globe')}${pill('MIT licensed', 'neutral', 'check')}</div></div>
+    <div class="page-head-copy"><span class="eyebrow">Security &amp; privacy</span><h1>The configuration stays here</h1><p class="page-lede">BIND Workbench is a static browser application with no account, database, config upload endpoint or analytics. Parsing, analysis, diffing, history and export run in this tab. An optional server-side password gate protects access to the app. This page explains the threat model, the live-DNS exception and what the design does not protect.</p><div class="meta-strip">${pill('no config upload API', 'ok', 'lock')}${pill('strict CSP', 'ok', 'shield')}${pill('opt-in DoH', 'warn', 'globe')}${pill('MIT licensed', 'neutral', 'check')}</div></div>
     <div class="page-actions"><a class="btn" href="#/learn/hardening">${icon('book', 16)} Hardening guide</a><a class="btn" href="https://github.com/RogerBergling/bind-gui" target="_blank" rel="noopener noreferrer">${icon('external', 16)} Source</a></div>
   </div>
 
   <div class="security-hero">
     <div class="security-diagram">
       <div class="security-node browser"><span>${icon('code', 22)}</span><strong>Browser tab</strong><small>File API → parser → analyzer → diff → localStorage</small></div>
-      <div class="security-arrow">${icon('arrow', 18)}<span>static files only</span></div>
+      <div class="security-arrow">${icon('arrow', 18)}<span>static files + optional auth</span></div>
       <div class="security-node server"><span>${icon('server', 22)}</span><strong>Container</strong><small>Python stdlib static server · GET/HEAD · no write path</small></div>
       <div class="security-arrow optional">${icon('globe', 18)}<span>opt-in only</span></div>
       <div class="security-node doh"><span>${icon('globe', 22)}</span><strong>DoH resolver</strong><small>Cloudflare or Google · query name/type only</small></div>
@@ -31,9 +31,24 @@ export function renderSecurity(view) {
       <tr><td>Analysis results</td><td>Memory</td><td>No</td><td>Recomputed on load; not persisted as a server record.</td></tr>
       <tr><td>Snapshots and history</td><td>localStorage</td><td>No</td><td>Up to 100 versions, bounded by a local size budget.</td></tr>
       <tr><td>Settings and theme</td><td>localStorage</td><td>No</td><td>Includes the online-lookup consent flag.</td></tr>
+      <tr><td>Password session (optional)</td><td>Server memory + HttpOnly cookie</td><td>No configuration data</td><td>Only when <code>BIND_WORKBENCH_PASSWORD</code> is set. The password is compared server-side; the cookie contains a random session token.</td></tr>
       <tr><td>Live DNS query name/type</td><td>Selected DoH resolver</td><td>Yes, only after opt-in</td><td>DoH endpoint receives the queried name and type. Configuration files are never included.</td></tr>
       <tr><td>Downloaded exports</td><td>Your filesystem</td><td>As a file you request</td><td>Plaintext, possibly including TSIG secrets found in source files.</td></tr>
     </tbody></table></div>
+  </section>
+
+  <section class="section-block">
+    <div class="section-head"><div><span class="eyebrow">Optional app password</span><h2>Gate the app at the server edge</h2></div></div>
+    <div class="callout ok">${icon('lock', 18)}<div><strong>Server-side, not a JavaScript password</strong><p>Set <code>BIND_WORKBENCH_PASSWORD</code> to require a login before the application shell or any asset is served. The password is compared in the Python server with <code>hmac.compare_digest</code>; it never appears in HTML, JavaScript or the frontend bundle.</p></div></div>
+    <ul class="security-list">
+      <li>The login page is the only public HTML entry point; application scripts and JSON return <code>401</code> until authenticated.</li>
+      <li>A successful login creates a random, <code>HttpOnly</code>, <code>SameSite=Strict</code> session cookie. Sessions live in process memory and expire after 12 hours by default.</li>
+      <li>Five failed attempts per IP per minute trigger a temporary <code>429</code> throttle.</li>
+      <li>The top bar shows a lock button when the gate is enabled; it clears the session and returns to the login page.</li>
+      <li>This protects the whole app, including imports, history, compare and export. It does not encrypt transport; use HTTPS in front of it.</li>
+      <li>It is a single shared secret, not a user account system. Use reverse-proxy authentication (Basic Auth, OIDC or an identity-aware proxy) for multi-user or internet-facing deployments.</li>
+    </ul>
+    <div class="callout warn">${icon('warning', 18)}<div><strong>Cookie and proxy detail</strong><p>The session cookie is marked <code>Secure</code> only when the server sees <code>X-Forwarded-Proto: https</code>. Configure your reverse proxy to set that header and to terminate TLS. Never expose a password-protected HTTP listener to an untrusted network.</p></div></div>
   </section>
 
   <section class="section-block">

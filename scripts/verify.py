@@ -25,8 +25,11 @@ REQUIRED = [
     "package.json",
     ".dockerignore",
     ".editorconfig",
+    ".env.example",
     "start.py",
     "public/index.html",
+    "public/login.html",
+    "public/login.js",
     "public/LICENSE.txt",
     "public/version.json",
     "public/assets/css/app.css",
@@ -107,6 +110,7 @@ def check_readme() -> None:
         "GHCR",
         "MIT",
         "Limitations",
+        "Password protection",
     ]
     for section in required_sections:
         if section.lower() not in text.lower():
@@ -143,6 +147,21 @@ def check_html() -> None:
         fail("public/index.html references a third-party asset host")
 
 
+def check_login_page() -> None:
+    html = read(PUBLIC / "login.html")
+    for term in ["Unlock the workbench", "login-password", "/login.js", "/assets/css/app.css"]:
+        if term not in html:
+            fail(f"public/login.html is missing {term!r}")
+    if re.search(r"<script(?![^>]*\bsrc=)", html, re.IGNORECASE):
+        fail("public/login.html contains an inline script")
+    script = read(PUBLIC / "login.js")
+    for term in ["/api/auth-status", "/api/login", "location.reload", "Invalid password"]:
+        if term not in script:
+            fail(f"public/login.js is missing {term!r}")
+    if "BIND_WORKBENCH_PASSWORD" in script:
+        fail("login.js must not contain the server password")
+
+
 def check_start_py() -> None:
     text = read(ROOT / "start.py")
     for term in [
@@ -156,6 +175,13 @@ def check_start_py() -> None:
         "do_HEAD",
         "list_directory",
         "--no-browser",
+        "BIND_WORKBENCH_PASSWORD",
+        "hmac.compare_digest",
+        "HttpOnly",
+        "SameSite=Strict",
+        "/api/login",
+        "/api/auth-status",
+        "Set-Cookie",
     ]:
         if term not in text:
             fail(f"start.py is missing {term!r}")
@@ -163,6 +189,12 @@ def check_start_py() -> None:
         fail("start.py CSP must not allow unsafe-eval")
     if "connect-src *" in text or "connect-src 'self' *" in text:
         fail("start.py CSP must not allow arbitrary outbound origins")
+    if "BIND_WORKBENCH_PASSWORD" not in compose_for_check():
+        fail("compose.yaml does not expose BIND_WORKBENCH_PASSWORD")
+
+
+def compose_for_check() -> str:
+    return read(ROOT / "compose.yaml")
 
 
 def check_docker() -> None:
@@ -265,6 +297,7 @@ def main() -> int:
     check_json()
     check_readme()
     check_html()
+    check_login_page()
     check_start_py()
     check_docker()
     check_workflows()

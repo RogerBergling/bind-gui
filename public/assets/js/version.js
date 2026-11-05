@@ -5,7 +5,7 @@ let clockTimer = null;
 
 export function loadBuildInfo() {
   if (!buildInfoPromise) {
-    buildInfoPromise = fetch('/version.json', { cache: 'no-store', credentials: 'omit' })
+    buildInfoPromise = fetch('/version.json', { cache: 'no-store', credentials: 'same-origin' })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => ({
         version: data?.version || 'dev',

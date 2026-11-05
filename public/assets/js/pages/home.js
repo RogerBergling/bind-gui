@@ -26,7 +26,7 @@ export async function renderHome(view) {
   }
 
   const buildCard = `<div class="build-card">
-    <div class="build-card-head"><span class="status-dot"></span><div><strong>This build</strong><span>Static container · no API · no database</span></div></div>
+    <div class="build-card-head"><span class="status-dot"></span><div><strong>This build</strong><span>Static container · optional auth · no config API</span></div></div>
     <div class="build-grid">
       <div><span>Version</span><strong data-app-version>dev</strong></div>
       <div><span>Image</span><strong data-image-tag>local</strong></div>
@@ -132,7 +132,7 @@ export async function renderHome(view) {
       <div class="privacy-banner-icon">${icon('shield', 22)}</div>
       <div>
         <strong>Local-first by architecture, not by promise.</strong>
-        <p>The container only serves static files. Parsing, analysis, diffing, history and export run in this tab. Live DNS uses only the curated DoH endpoints you enable.</p>
+        <p>The container serves static files and an optional password-session API. It never receives configuration data. Parsing, analysis, diffing, history and export run in this tab. Live DNS uses only the curated DoH endpoints you enable.</p>
       </div>
       <a class="btn btn-sm" href="#/security">Security model</a>
     </div>
@@ -187,7 +187,7 @@ export async function renderHome(view) {
         </div>
       </div>
       <div class="privacy-facts">
-        <div class="fact">${icon('check', 18)}<div><strong>No upload endpoint</strong><span>The server has no API, database or write path.</span></div></div>
+        <div class="fact">${icon('check', 18)}<div><strong>No config upload endpoint</strong><span>The server has no config API, database or write path. The optional auth API only handles the login session.</span></div></div>
         <div class="fact">${icon('check', 18)}<div><strong>Strict CSP</strong><span>Only self-hosted assets and two DoH origins are allowed.</span></div></div>
         <div class="fact">${icon('check', 18)}<div><strong>Safe export</strong><span>Original files plus manifest, hashes, validate.sh and dig plans.</span></div></div>
         <div class="fact">${icon('warning', 18)}<div><strong>Always run the real tools</strong><span>named-checkconf and named-checkzone with the exact BIND version remain the final gate.</span></div></div>

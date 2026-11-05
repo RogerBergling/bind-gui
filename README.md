@@ -13,7 +13,7 @@ Import → parse → explain → analyze → compare → edit → export
                     opt-in Live DNS / DNSSEC checks (DoH)
 ```
 
-The published container is a static file server. Parsing, analysis, record inspection, diffing, DNSSEC digest checks, history and export all run in your browser. There is no account system, database, upload endpoint, analytics script or third-party request — except the opt-in Live DNS queries you explicitly send to Cloudflare or Google. Configuration data never leaves the tab.
+The published container is a static file server with optional password-session endpoints. Parsing, analysis, record inspection, diffing, DNSSEC digest checks, history and export all run in your browser. There is no account system, database, config upload endpoint, analytics script or third-party request — except the opt-in Live DNS queries you explicitly send to Cloudflare or Google. Configuration data never leaves the tab.
 
 > **MIT licensed. Use at your own risk.** This is an independent tool, not official BIND or ISC software. Generated exports are annotated source bundles, not a deployment system. Always review the change and validate with the exact BIND binary using `named-checkconf`, `named-checkzone`, `dig`/`delv` and a staged deployment.
 
@@ -40,6 +40,37 @@ docker compose up -d --force-recreate
 ```
 
 > **First pull/auth issue?** If GHCR says the package is private, make it public under **GitHub → Packages → bind-gui → Package settings → Change visibility → Public**, or run `docker login ghcr.io` first.
+
+### Optional password protection
+
+Imports are processed locally, so a password implemented only in JavaScript would be cosmetic. This deployment supports an optional **server-side password gate** that protects the whole app — including every import/upload, export and history surface — before any of the application assets are served.
+
+Set a password in `.env` next to `compose.yaml`:
+
+```sh
+cp .env.example .env
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+# put the generated value in .env as BIND_WORKBENCH_PASSWORD=...
+docker compose up -d --force-recreate
+```
+
+Or when running directly:
+
+```sh
+BIND_WORKBENCH_PASSWORD='a-long-random-value' python3 start.py
+```
+
+When the variable is set:
+
+- `/` serves a login page instead of the workbench.
+- Application scripts and JSON files return `401` until authenticated.
+- The password is checked server-side with `hmac.compare_digest`; it is never embedded in HTML or JavaScript.
+- A successful login creates a random, `HttpOnly`, `SameSite=Strict` session cookie. Sessions live in process memory and expire after 12 hours by default (`BIND_WORKBENCH_SESSION_HOURS`).
+- Five failed attempts per IP within a minute trigger a temporary `429` throttle.
+- The top bar shows a lock button when auth is enabled; it clears the session and returns to the login page.
+- The password protects the whole app, not just a single upload route. Configurations still never leave the browser.
+
+> **Use HTTPS whenever the password gate is reachable beyond localhost.** The password is submitted over HTTP and a reverse proxy should terminate TLS. Set `X-Forwarded-Proto: https` so the session cookie is marked `Secure`. For public or multi-user deployments, also use reverse-proxy authentication (Basic Auth, OIDC or an identity-aware proxy); this app-level password is a single shared secret, not a user system.
 
 ### First five minutes
 
@@ -70,9 +101,9 @@ Everything except the explicit DoH queries runs locally in the browser.
 | --- | --- |
 | [![Live DNS](docs/screenshots/live.png)](docs/screenshots/live.png) | [![DNSSEC chain](docs/screenshots/dnssec.png)](docs/screenshots/dnssec.png) |
 
-| DNSSEC audit (NSEC3PARAM + RRSIG) | |
+| DNSSEC audit (NSEC3PARAM + RRSIG) | Password gate |
 | --- | --- |
-| [![DNSSEC audit](docs/screenshots/audit.png)](docs/screenshots/audit.png) | |
+| [![DNSSEC audit](docs/screenshots/audit.png)](docs/screenshots/audit.png) | [![Login](docs/screenshots/login.png)](docs/screenshots/login.png) |
 
 | Learn | |
 | --- | --- |
@@ -183,16 +214,22 @@ Browser tab
                                              up to 100 snapshots
   Live DNS (opt-in) ──► Cloudflare/Google DoH (query name/type only)
 Server / container
-  static files + GET /version.json only
+  static files + GET /version.json + optional auth session API
 ```
 
-- The container runs a Python stdlib static server. It has no API, database, write path or configuration storage.
+- The container runs a Python stdlib static server. It has no config API, database, write path or configuration storage. The optional password gate adds only `/api/auth-status`, `/api/login` and `/api/logout`.
 - Imported configs are read by the browser and serialized into `localStorage` only when you import, edit or save.
-- The only same-origin fetch is `/version.json`, used for version, image tag, commit and build date.
+- The app fetches `/version.json` for build metadata. When a password is configured, `/api/auth-status`, `/api/login` and `/api/logout` handle the session cookie only. Live DNS fetches go to the two DoH origins after opt-in.
 - No external fonts, CDNs, analytics, crash reporting or advertising.
 - Strict CSP, `frame-ancestors 'none'`, `no-referrer`, `nosniff`, COOP/CORP and `no-store` caching.
 - The Docker image runs as a non-root user, read-only, with all capabilities dropped and `no-new-privileges` in the included Compose file.
 - User-controlled configuration text is escaped before rendering and is never evaluated as code.
+
+### Optional app password
+
+Password protection is optional and disabled unless `BIND_WORKBENCH_PASSWORD` is set. When enabled, the Python static server gates the application shell and assets behind a login page and a server-side session cookie. This is deliberately not a client-side password: the comparison happens in the server process, the password never appears in the frontend bundle, and a missing or wrong password returns a generic error. The session token is random, `HttpOnly`, `SameSite=Strict`, and marked `Secure` when `X-Forwarded-Proto: https` is present. Sessions are in memory; restarting the container invalidates them.
+
+The gate protects access to the app, and therefore to imports, analysis, history and exports. It does not encrypt network traffic, does not create user accounts and is not a substitute for HTTPS or reverse-proxy authentication on an internet-facing deployment.
 
 ### The live-DNS exception
 
@@ -239,7 +276,9 @@ Build the image yourself:
 ```sh
 docker build -t bind-workbench:local .
 docker run --rm -p 127.0.0.1:8005:8005 --read-only --cap-drop=ALL \
-  --security-opt=no-new-privileges:true bind-workbench:local
+  --security-opt=no-new-privileges:true \
+  -e BIND_WORKBENCH_PASSWORD='replace-with-a-long-random-value' \
+  bind-workbench:local
 ```
 
 ### Local, without Docker
@@ -255,6 +294,7 @@ This picks the first free port in `8005–8025` and opens a browser. Use:
 ```sh
 python3 start.py --port 8005 --host 127.0.0.1
 python3 start.py --no-browser
+BIND_WORKBENCH_PASSWORD='a-long-random-value' python3 start.py
 ```
 
 Open the site through the server, not as a `file://` URL, because ES modules and same-origin fetches require HTTP.

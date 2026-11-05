@@ -1,6 +1,7 @@
 import { applyBuildInfo, loadBuildInfo } from './version.js';
 import { getSettings, saveSettings } from './storage.js';
 import { CURRENT_KEY, HISTORY_KEY, SETTINGS_KEY } from './storage.js';
+import { initAuth } from './auth.js';
 import { icon } from './ui.js';
 
 const view = document.getElementById('view');
@@ -235,5 +236,6 @@ window.addEventListener('workbench:data', (event) => {
 
 initTheme();
 initShortcuts();
+initAuth();
 loadBuildInfo().then((info) => applyBuildInfo(document, info));
 render();

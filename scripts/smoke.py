@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -48,6 +49,108 @@ def request_raw(port: int, path: str, method: str = "GET"):
     headers = dict(response.getheaders())
     connection.close()
     return response.status, headers, body
+
+
+def auth_request(port: int, path: str, method: str = "GET", headers: dict | None = None, data: bytes | None = None):
+    request = urllib.request.Request(
+        f"http://{HOST}:{port}{path}",
+        data=data,
+        method=method,
+        headers=headers or {},
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        response = opener.open(request, timeout=5)
+        return response.status, dict(response.headers), response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, dict(error.headers), error.read()
+
+
+def run_auth_tests(failures: list[str]) -> None:
+    port = free_port()
+    password = "correct horse battery staple"
+    env = {**os.environ, "BIND_WORKBENCH_PASSWORD": password, "BIND_WORKBENCH_SESSION_HOURS": "1"}
+    process = subprocess.Popen(
+        [sys.executable, str(ROOT / "start.py"), "--host", HOST, "--port", str(port), "--no-browser"],
+        cwd=str(ROOT),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        wait_for(port)
+        status, headers, body = auth_request(port, "/")
+        if status != 200 or b"Unlock the workbench" not in body:
+            failures.append("Password gate did not serve the login page at /")
+        if b'id="view"' in body:
+            failures.append("Password gate served the app shell before login")
+        if password.encode() in body:
+            failures.append("Password leaked into the login page")
+
+        status, _, body = auth_request(port, "/assets/js/app.js")
+        if status != 401:
+            failures.append(f"Unauthenticated app asset returned {status}, expected 401")
+        status, _, _ = auth_request(port, "/assets/css/app.css")
+        if status != 200:
+            failures.append("Login stylesheet was not publicly accessible")
+        status, _, _ = auth_request(port, "/login.js")
+        if status != 200:
+            failures.append("Login script was not publicly accessible")
+        status, _, body = auth_request(port, "/api/auth-status")
+        if status != 200 or b'"required":true' not in body or b'"authenticated":false' not in body:
+            failures.append("auth-status did not report the unauthenticated gate")
+
+        status, headers, body = auth_request(
+            port,
+            "/api/login",
+            "POST",
+            {"Content-Type": "application/json"},
+            json.dumps({"password": "wrong"}).encode(),
+        )
+        if status != 401 or b"Invalid password" not in body:
+            failures.append("Wrong password did not return a generic 401")
+        if "Set-Cookie" in headers:
+            failures.append("Wrong password returned a session cookie")
+
+        status, headers, body = auth_request(
+            port,
+            "/api/login",
+            "POST",
+            {"Content-Type": "application/json"},
+            json.dumps({"password": password}).encode(),
+        )
+        if status != 200:
+            failures.append(f"Correct password returned {status}")
+        cookie_header = headers.get("Set-Cookie", "")
+        for marker in ["HttpOnly", "SameSite=Strict", "Path=/", "Max-Age="]:
+            if marker not in cookie_header:
+                failures.append(f"Session cookie lacks {marker}")
+        cookie = cookie_header.split(";", 1)[0]
+        if not cookie.startswith("bind_workbench_session="):
+            failures.append("Session cookie has an unexpected name")
+
+        status, _, body = auth_request(port, "/api/auth-status", headers={"Cookie": cookie})
+        if status != 200 or b'"authenticated":true' not in body:
+            failures.append("auth-status did not report the authenticated session")
+        status, _, body = auth_request(port, "/", headers={"Cookie": cookie})
+        if status != 200 or b'id="view"' not in body:
+            failures.append("Authenticated request did not serve the app shell")
+        status, _, _ = auth_request(port, "/version.json", headers={"Cookie": cookie})
+        if status != 200:
+            failures.append("Authenticated version.json request failed")
+
+        status, _, _ = auth_request(port, "/api/logout", "POST", headers={"Cookie": cookie})
+        if status != 200:
+            failures.append("Logout failed")
+        status, _, body = auth_request(port, "/api/auth-status", headers={"Cookie": cookie})
+        if b'"authenticated":false' not in body:
+            failures.append("Logout did not invalidate the session")
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
 
 
 def main() -> int:
@@ -131,6 +234,8 @@ def main() -> int:
             failures.append("Path traversal exposed start.py")
         if traversal_status == 200 and b"BIND Workbench" not in traversal_body:
             failures.append("Unexpected traversal response")
+
+        run_auth_tests(failures)
     finally:
         process.terminate()
         try:
@@ -143,7 +248,7 @@ def main() -> int:
         for failure in failures:
             print(f"  error: {failure}")
         return 1
-    print("  headers, MIME types, routing and containment: OK")
+    print("  headers, MIME types, routing, containment and password gate: OK")
     return 0
 
 

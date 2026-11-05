@@ -25,6 +25,11 @@ for (const directory of directories) {
     /* optional directory */
   }
 }
+try {
+  files.push(join(root, 'public', 'login.js'));
+} catch {
+  /* optional */
+}
 
 const failures = [];
 for (const file of files.sort()) {
