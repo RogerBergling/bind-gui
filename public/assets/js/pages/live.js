@@ -14,7 +14,7 @@ import { buildVerificationChecks, runVerification, summarizeVerification, verifi
 import { parseWorkspace } from '../dns/workspace.js';
 import { getCurrentWorkspace, getSettings, saveSettings } from '../storage.js';
 import { articleById } from '../data/learn.js';
-import { callout, codeBlock, icon, pill, toast, wireCopyButtons } from '../ui.js';
+import { codeBlock, icon, pill, toast, wireCopyButtons } from '../ui.js';
 import { escapeHTML, formatDateTime, formatNumber } from '../utils.js';
 
 export async function renderLive(view, query) {

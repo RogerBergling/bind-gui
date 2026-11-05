@@ -9,12 +9,11 @@ import {
   utf8,
 } from '../utils.js';
 import { labelsOf, nameToWire, normalizeName, parentName } from './names.js';
-import { parseDnssecTime, tokenizeFields } from './syntax.js';
+import { tokenizeFields } from './syntax.js';
 import { algorithmInfo, digestInfo, normalizeType, typeCode } from './types.js';
 import { queryDns } from './doh.js';
 import {
   dnskeyTag,
-  findZoneApex,
   parseDnskeyRdata,
   parseDsRdata,
   parseRrsigRdata,

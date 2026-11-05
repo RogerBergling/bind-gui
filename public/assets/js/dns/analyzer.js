@@ -8,23 +8,20 @@ import {
   isReverseName,
   isSubdomain,
   normalizeName,
-  parentName,
 } from './names.js';
-import { normalizeRdataForCompare, parseTTL } from './syntax.js';
+import { normalizeRdataForCompare } from './syntax.js';
 import { algorithmInfo, digestInfo, keyFlagLabel } from './types.js';
 import {
   dnskeyTag,
   matchDsToDnskeys,
   parseDnskeyRdata,
   parseDsRdata,
-  parseRrsigRdata,
   rrsigHealth,
   zoneDnssecInventory,
   zoneUsesManagedSigning,
 } from './dnssec.js';
 import {
   globalAclValues,
-  optionEnabled,
   optionEntry,
   optionValues,
   zoneAclValues,

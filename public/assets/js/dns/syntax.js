@@ -4,8 +4,6 @@ import {
   canonicalIp,
   canonicalIPv4,
   canonicalIPv6,
-  isValidIPv4,
-  isValidIPv6,
   normalizeName,
   stripTrailingDot,
 } from './names.js';

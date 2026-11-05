@@ -39,7 +39,7 @@ export async function renderWorkbench(view, param, query) {
   const cleanups = [];
 
   if (!workspace) {
-    view.innerHTML = workbenchEmptyState();
+    view.innerHTML = workspaceEmptyState();
     wireImportControls(view, { navigate: false, onImported: () => window.dispatchEvent(new Event('workbench:reload')) });
     return null;
   }
@@ -267,27 +267,8 @@ export async function renderWorkbench(view, param, query) {
     <div class="validation-panel" id="validation-panel"></div>`;
   }
 
-  function statementDocHtml(statement) {
-    const doc = directiveDoc(statement.keyword);
-    if (!doc) {
-      return `<div class="doc-inline muted-note">${icon('info', 14)} No encyclopedia entry for <code>${escapeHTML(statement.keyword)}</code> yet. It is preserved exactly as written.</div>`;
-    }
-    return `<div class="doc-inline">
-      <div class="doc-inline-head"><strong>${escapeHTML(doc.name)}</strong>${pill(doc.context, 'neutral')}</div>
-      <p>${escapeHTML(doc.summary)}</p>
-      <details><summary>Syntax, security and gotchas</summary>
-        <div class="syntax-box"><span>syntax</span><code>${escapeHTML(doc.syntax)}</code></div>
-        <p>${escapeHTML(doc.what)}</p>
-        ${doc.security ? `<p><strong>Security:</strong> ${escapeHTML(doc.security)}</p>` : ''}
-        ${doc.gotchas?.length ? `<ul>${doc.gotchas.map((item) => `<li>${escapeHTML(item)}</li>`).join('')}</ul>` : ''}
-        <a class="learn-link" href="#/reference?q=${encodeURIComponent(statement.keyword)}">Open full reference ${icon('arrow', 13)}</a>
-      </details>
-    </div>`;
-  }
-
   function renderStatement(statement, depth = 0) {
     const args = (statement.args || []).join(' ');
-    const label = `${statement.keyword}${args ? ` ${args}` : ''}`;
     const doc = directiveDoc(statement.keyword);
     const body = statement.body?.length
       ? `<div class="statement-children">${statement.body.map((child) => renderStatement(child, depth + 1)).join('')}</div>`
@@ -461,7 +442,6 @@ export async function renderWorkbench(view, param, query) {
   }
 
   function shellHtml() {
-    const file = activeFile();
     return `<div class="page-head workbench-head">
       <div class="page-head-copy">
         <span class="eyebrow">Workspace</span>

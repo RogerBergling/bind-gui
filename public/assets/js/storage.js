@@ -1,7 +1,6 @@
 /* Browser-local storage for the current workspace, snapshots and settings. */
 
 import { workspaceFingerprint } from './dns/workspace.js';
-import { safeJsonParse } from './utils.js';
 
 const PREFIX = 'bind-workbench:v1';
 export const CURRENT_KEY = `${PREFIX}:current`;

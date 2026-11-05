@@ -90,7 +90,7 @@ def check_json() -> None:
         fail("package.json name must be bind-workbench")
     if not re.match(r"^\d+\.\d+\.\d+", str(package.get("version", ""))):
         fail("package.json version must be semver-like")
-    if version.get("version") not in ("1.0.0", "dev"):
+    if version.get("version") not in (package.get("version"), "dev"):
         warn("public/version.json version is not the development placeholder")
 
 

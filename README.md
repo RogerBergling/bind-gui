@@ -54,11 +54,13 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 docker compose up -d --force-recreate
 ```
 
-Or when running directly:
+Or when running directly, put the same value in `.env` next to `start.py`; the local launcher loads it automatically:
 
 ```sh
 BIND_WORKBENCH_PASSWORD='a-long-random-value' python3 start.py
 ```
+
+`start.py` reads `./.env` by default (without overriding variables already exported in the shell). To use a different file, set `BIND_WORKBENCH_ENV_FILE=/path/to/env`. Docker Compose reads `.env` itself and passes the value into the container.
 
 When the variable is set:
 
@@ -71,6 +73,21 @@ When the variable is set:
 - The password protects the whole app, not just a single upload route. Configurations still never leave the browser.
 
 > **Use HTTPS whenever the password gate is reachable beyond localhost.** The password is submitted over HTTP and a reverse proxy should terminate TLS. Set `X-Forwarded-Proto: https` so the session cookie is marked `Secure`. For public or multi-user deployments, also use reverse-proxy authentication (Basic Auth, OIDC or an identity-aware proxy); this app-level password is a single shared secret, not a user system.
+
+If the login page does not appear:
+
+```sh
+# Confirm Compose sees the variable.
+docker compose config | grep BIND_WORKBENCH_PASSWORD
+
+# Environment changes need a recreate, not just a restart.
+docker compose up -d --force-recreate
+
+# The server prints Auth: password required when the gate is active.
+docker compose logs --tail=20
+```
+
+If you run `python3 start.py` directly, `.env` is loaded from the directory containing `start.py`; use `BIND_WORKBENCH_ENV_FILE=/path/to/.env` if it lives elsewhere. If `BIND_WORKBENCH_PASSWORD` is empty, the gate is deliberately disabled.
 
 ### First five minutes
 

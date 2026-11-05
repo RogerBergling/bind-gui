@@ -24,6 +24,7 @@ export function detectFileKind(path, content = '') {
   const lower = String(path || '').toLowerCase();
   const name = lower.split('/').pop() || lower;
   const extension = name.includes('.') ? `.${name.split('.').pop()}` : '';
+  if (name.startsWith('readme') || name.startsWith('license') || extension === '.md') return 'other';
   if (name === 'named.conf' || name.startsWith('named.conf.') || name.endsWith('.named.conf')) return 'named';
   if (/(^|\/)named\.conf(\.|$)/.test(lower)) return 'named';
   if (ZONE_EXTENSIONS.has(extension)) return 'zone';
@@ -239,9 +240,6 @@ function aclIsNone(statement) {
   return aclHas(flattenAclValues(statement), 'none');
 }
 
-function statementArgsText(statement) {
-  return (statement?.args || []).join(' ');
-}
 
 export function parseWorkspace(workspace) {
   const started = Date.now();

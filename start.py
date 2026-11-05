@@ -42,6 +42,34 @@ WEB_ROOT = ROOT / "public"
 WEB_ROOT_REAL = WEB_ROOT.resolve()
 PORT_RANGE = range(8005, 8026)
 
+
+def load_env_file(path: Path) -> None:
+    """Load simple KEY=VALUE lines from .env without overriding real env vars."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or not key.replace("_", "").isalnum() or key[0].isdigit():
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+ENV_FILE = Path(os.environ.get("BIND_WORKBENCH_ENV_FILE", str(ROOT / ".env"))).expanduser()
+load_env_file(ENV_FILE)
+
 PASSWORD_ENV = "BIND_WORKBENCH_PASSWORD"
 SESSION_HOURS_ENV = "BIND_WORKBENCH_SESSION_HOURS"
 AUTH_PASSWORD = os.environ.get(PASSWORD_ENV, "")
@@ -421,6 +449,7 @@ def main() -> int:
     print("  --------------")
     print(f"  Serving : {WEB_ROOT}")
     print(f"  Open    : {url}")
+    print(f"  Env file: {ENV_FILE if ENV_FILE.exists() else 'not present (optional)'}")
     print(f"  Auth    : {'password required (BIND_WORKBENCH_PASSWORD set)' if AUTH_ENABLED else 'disabled (local/default)'}")
     print("  Privacy : configs stay in your browser; live DNS is opt-in")
     print("  Stop    : Ctrl+C")

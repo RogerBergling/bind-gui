@@ -1,6 +1,6 @@
 /* Security and privacy model page. */
 
-import { icon, pill, callout, codeBlock } from '../ui.js';
+import { icon, pill, codeBlock } from '../ui.js';
 
 export function renderSecurity(view) {
   view.innerHTML = `<div class="page-head">

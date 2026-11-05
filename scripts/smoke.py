@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import http.client
+import contextlib
 import json
 import os
 import socket
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.request
@@ -69,7 +71,11 @@ def auth_request(port: int, path: str, method: str = "GET", headers: dict | None
 def run_auth_tests(failures: list[str]) -> None:
     port = free_port()
     password = "correct horse battery staple"
-    env = {**os.environ, "BIND_WORKBENCH_PASSWORD": password, "BIND_WORKBENCH_SESSION_HOURS": "1"}
+    env_handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False)
+    env_handle.write(f"BIND_WORKBENCH_PASSWORD={password}\nBIND_WORKBENCH_SESSION_HOURS=1\n")
+    env_handle.close()
+    env = {**os.environ, "BIND_WORKBENCH_ENV_FILE": env_handle.name}
+    env.pop("BIND_WORKBENCH_PASSWORD", None)
     process = subprocess.Popen(
         [sys.executable, str(ROOT / "start.py"), "--host", HOST, "--port", str(port), "--no-browser"],
         cwd=str(ROOT),
@@ -151,6 +157,8 @@ def run_auth_tests(failures: list[str]) -> None:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             process.kill()
+        with contextlib.suppress(OSError):
+            os.unlink(env_handle.name)
 
 
 def main() -> int:
