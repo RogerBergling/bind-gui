@@ -11,6 +11,7 @@ const UPLOAD_UNLOCK_KEY = 'bind-workbench:upload-unlocked';
 let uploadStatusPromise = null;
 let uploadUnlockPromise = null;
 let uploadUnlockedThisPage = false;
+let uploadAuthRequired = false;
 
 export async function getUploadStatus() {
   if (!uploadStatusPromise) {
@@ -45,6 +46,114 @@ export function clearUploadUnlock() {
     sessionStorage.removeItem(UPLOAD_UNLOCK_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+async function verifyUploadPassword(password) {
+  try {
+    const response = await fetch('/api/upload-auth', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'X-Bind-Upload-Password': password },
+    });
+    let data = {};
+    try {
+      data = await response.json();
+    } catch {
+      /* keep the status-code message */
+    }
+    if (response.ok && data.ok) return { ok: true };
+    if (response.status === 429) return { ok: false, error: 'Too many attempts. Wait a minute and try again.' };
+    if (response.status === 401) return { ok: false, error: 'Invalid import password.' };
+    return { ok: false, error: data.error || `Import unlock failed (HTTP ${response.status}).` };
+  } catch {
+    return { ok: false, error: 'Could not reach the server to verify the import password.' };
+  }
+}
+
+function uploadGatePanel(status) {
+  if (hasUploadUnlock()) {
+    return `<div class="upload-gate-panel unlocked">
+      <div class="upload-gate-icon">${icon('check', 17)}</div>
+      <div class="upload-gate-copy"><strong>Import unlocked for this tab</strong><span>The password was verified. Lock the session or close the tab to require it again.</span></div>
+    </div>`;
+  }
+  return `<div class="upload-gate-panel">
+    <div class="upload-gate-icon">${icon('lock', 17)}</div>
+    <div class="upload-gate-copy">
+      <strong>Import password required</strong>
+      <span>${status.separatePassword ? 'This server requires a dedicated import password.' : 'This server uses the app password for the import check.'} Verified server-side; not stored in the browser.</span>
+    </div>
+    <div class="upload-gate-control">
+      <input class="upload-gate-input" type="password" autocomplete="current-password" spellcheck="false" placeholder="Import password" aria-label="Import password">
+      <button class="btn btn-primary btn-sm" type="button" data-upload-unlock>${icon('lock', 14)} Unlock</button>
+    </div>
+    <div class="upload-gate-error" role="alert" hidden></div>
+  </div>`;
+}
+
+function refreshUploadGatePanels() {
+  for (const panel of document.querySelectorAll('[data-upload-gate]')) {
+    if (!panel.dataset.required || panel.dataset.required !== 'true') continue;
+    panel.innerHTML = uploadGatePanel(JSON.parse(panel.dataset.gateStatus || '{}'));
+    wireUploadGatePanel(panel);
+  }
+}
+
+function wireUploadGatePanel(panel) {
+  const input = panel.querySelector('.upload-gate-input');
+  const button = panel.querySelector('[data-upload-unlock]');
+  const error = panel.querySelector('.upload-gate-error');
+  if (!input || !button) return;
+  const submit = async () => {
+    const password = input.value;
+    if (!password) {
+      error.textContent = 'Enter the import password.';
+      error.hidden = false;
+      input.focus();
+      return;
+    }
+    button.disabled = true;
+    button.textContent = 'Checking…';
+    const result = await verifyUploadPassword(password);
+    button.disabled = false;
+    button.innerHTML = `${icon('lock', 14)} Unlock`;
+    if (result.ok) {
+      rememberUploadUnlock();
+      refreshUploadGatePanels();
+      toast('Import unlocked for this tab.', 'ok');
+    } else {
+      error.textContent = result.error;
+      error.hidden = false;
+      input.select();
+    }
+  };
+  button.addEventListener('click', submit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submit();
+    }
+  });
+}
+
+export async function mountUploadGate(root = document) {
+  const panels = Array.from(root.querySelectorAll('[data-upload-gate]'));
+  if (!panels.length) return;
+  const status = await getUploadStatus();
+  uploadAuthRequired = Boolean(status?.required);
+  for (const panel of panels) {
+    panel.dataset.required = String(Boolean(status?.required));
+    panel.dataset.gateStatus = JSON.stringify(status || {});
+    if (!status?.required) {
+      panel.hidden = true;
+      panel.innerHTML = '';
+      continue;
+    }
+    panel.hidden = false;
+    panel.innerHTML = uploadGatePanel(status);
+    wireUploadGatePanel(panel);
   }
 }
 
@@ -93,35 +202,18 @@ export async function ensureUploadUnlocked() {
           errorNode.hidden = true;
           submit.disabled = true;
           submit.textContent = 'Checking…';
-          try {
-            const response = await fetch('/api/upload-auth', {
-              method: 'POST',
-              credentials: 'same-origin',
-              cache: 'no-store',
-              headers: { 'X-Bind-Upload-Password': password },
-            });
-            let data = {};
-            try {
-              data = await response.json();
-            } catch {
-              /* keep the status-code message */
-            }
-            if (response.ok && data.ok) {
-              rememberUploadUnlock();
-              toast('Import unlocked for this tab.', 'ok');
-              finish(true, close);
-              return;
-            }
-            if (response.status === 429) showError('Too many attempts. Wait a minute and try again.');
-            else if (response.status === 401) showError('Invalid import password.');
-            else showError(data.error || `Import unlock failed (HTTP ${response.status}).`);
-            input.select();
-          } catch {
-            showError('Could not reach the server to verify the import password.');
-          } finally {
-            submit.disabled = false;
-            submit.textContent = 'Unlock import';
+          const result = await verifyUploadPassword(password);
+          if (result.ok) {
+            rememberUploadUnlock();
+            refreshUploadGatePanels();
+            toast('Import unlocked for this tab.', 'ok');
+            finish(true, close);
+            return;
           }
+          showError(result.error);
+          input.select();
+          submit.disabled = false;
+          submit.textContent = 'Unlock import';
         };
         submit.addEventListener('click', attempt);
         input.addEventListener('keydown', (event) => {
@@ -232,6 +324,20 @@ export function loadSample(sampleId, onImported = null) {
   return workspace;
 }
 
+function focusUploadGate(root) {
+  const gate = root.querySelector('[data-upload-gate]');
+  if (!gate || gate.hidden) return false;
+  gate.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const input = gate.querySelector('.upload-gate-input');
+  if (input) setTimeout(() => input.focus(), 150);
+  toast('Enter the import password before choosing files.', 'warn');
+  return true;
+}
+
+function importBlocked(root) {
+  return uploadAuthRequired && !hasUploadUnlock() && focusUploadGate(root);
+}
+
 export function wireImportControls(root, options = {}) {
   let fileInput = root.querySelector('#import-file-input');
   let folderInput = root.querySelector('#import-folder-input');
@@ -269,12 +375,18 @@ export function wireImportControls(root, options = {}) {
   root.querySelectorAll('[data-import-files]').forEach((button) => {
     if (button.dataset.wired === 'true') return;
     button.dataset.wired = 'true';
-    button.addEventListener('click', () => fileInput.click());
+    button.addEventListener('click', () => {
+      if (importBlocked(root)) return;
+      fileInput.click();
+    });
   });
   root.querySelectorAll('[data-import-folder]').forEach((button) => {
     if (button.dataset.wired === 'true') return;
     button.dataset.wired = 'true';
-    button.addEventListener('click', () => folderInput.click());
+    button.addEventListener('click', () => {
+      if (importBlocked(root)) return;
+      folderInput.click();
+    });
   });
   root.querySelectorAll('[data-sample-id]').forEach((button) => {
     if (button.dataset.wired === 'true') return;
@@ -285,10 +397,14 @@ export function wireImportControls(root, options = {}) {
   root.querySelectorAll('[data-dropzone]').forEach((zone) => {
     if (zone.dataset.wired === 'true') return;
     zone.dataset.wired = 'true';
-    zone.addEventListener('click', () => fileInput.click());
+    zone.addEventListener('click', () => {
+      if (importBlocked(root)) return;
+      fileInput.click();
+    });
     zone.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
+        if (importBlocked(root)) return;
         fileInput.click();
       }
     });
@@ -307,12 +423,14 @@ export function wireImportControls(root, options = {}) {
     zone.addEventListener('drop', async (event) => {
       stop(event);
       zone.classList.remove('dragging');
+      if (importBlocked(root)) return;
       if (!(await ensureUploadUnlocked())) return;
       const files = await filesFromDataTransfer(event.dataTransfer);
       if (files.length) await handleImport(files, options);
     });
   });
 
+  mountUploadGate(root);
   return { fileInput, folderInput, importFiles: (files) => handleImport(files, options) };
 }
 

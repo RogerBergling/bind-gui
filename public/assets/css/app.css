@@ -998,3 +998,49 @@ dialog.modal::backdrop { background: rgba(2, 6, 15, .72); backdrop-filter: blur(
 .login-foot a { color: var(--muted); }
 .auth-lock { color: var(--muted); }
 .auth-lock:hover { color: var(--accent); }
+
+/* ---------- inline import password gate ---------- */
+.upload-gate-panel {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  flex-wrap: wrap;
+  padding: .7rem .8rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.upload-gate-panel.unlocked {
+  border-color: color-mix(in srgb, var(--ok) 32%, transparent);
+  background: color-mix(in srgb, var(--ok) 6%, transparent);
+}
+.upload-gate-icon {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  flex: 0 0 auto;
+}
+.upload-gate-panel.unlocked .upload-gate-icon { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.upload-gate-copy { flex: 1 1 280px; min-width: 0; }
+.upload-gate-copy strong { display: block; font-size: .84rem; }
+.upload-gate-copy span { display: block; color: var(--muted); font-size: .74rem; }
+.upload-gate-control { display: flex; gap: .35rem; align-items: center; margin-left: auto; flex: 0 1 auto; }
+.upload-gate-input {
+  min-width: 210px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: .42rem .55rem;
+  color: var(--text);
+  font: inherit;
+  font-size: .82rem;
+}
+.upload-gate-input:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.upload-gate-error { flex-basis: 100%; color: var(--danger); font-size: .76rem; }
+@media (max-width: 620px) {
+  .upload-gate-control { width: 100%; margin-left: 0; }
+  .upload-gate-input { flex: 1; min-width: 0; }
+}

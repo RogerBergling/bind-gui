@@ -80,7 +80,7 @@ A dedicated password can gate the import workflow even when the app itself is op
 BIND_WORKBENCH_UPLOAD_PASSWORD=another-long-random-value
 ```
 
-With this set, the first file/folder/ZIP import in a tab opens an **Import password** dialog. The password is checked server-side against `POST /api/upload-auth`; it is not stored in the browser. A per-tab unlocked flag avoids asking again until the tab closes or the session is locked.
+With this set, the import surfaces show an **Import password** field on the page, before you choose files. The password is checked server-side against `POST /api/upload-auth`; it is not stored in the browser. A per-tab unlocked flag avoids asking again until the tab closes or the session is locked. Header/Compare imports use the same password dialog as a fallback when the inline field is not visible.
 
 - If `BIND_WORKBENCH_UPLOAD_PASSWORD` is empty, it falls back to `BIND_WORKBENCH_PASSWORD` when that is set.
 - If both are empty, imports run without a password.

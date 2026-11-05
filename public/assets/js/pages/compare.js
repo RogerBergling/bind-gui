@@ -7,7 +7,7 @@ import { parseZone } from '../dns/zone-parser.js';
 import { getCurrentWorkspace, getHistory, getSnapshot } from '../storage.js';
 import { icon, pill, renderDiff, toast, wireCopyButtons } from '../ui.js';
 import { escapeHTML, formatDateTime, formatNumber, readFileText } from '../utils.js';
-import { ensureUploadUnlocked } from './import-ui.js';
+import { ensureUploadUnlocked, mountUploadGate } from './import-ui.js';
 
 export async function renderCompare(view, query) {
   const workspace = getCurrentWorkspace();
@@ -43,6 +43,7 @@ export async function renderCompare(view, query) {
         <label class="field"><span>Content</span><textarea id="right-text" class="compare-editor" spellcheck="false" placeholder="Paste the other version here…"></textarea></label>
       </article>
     </div>
+    <div data-upload-gate></div>
     <div class="compare-actions"><button class="btn btn-primary" type="button" id="run-compare">${icon('diff', 16)} Compare files</button><button class="btn btn-ghost" type="button" id="swap-compare">${icon('refresh', 15)} Swap</button><span class="muted-note">Nothing is uploaded. Large files are diffed in the browser.</span></div>
     <div id="compare-output" class="compare-output">${comparison ? renderComparison(comparison) : `<div class="empty-panel"><h2>No comparison yet</h2><p>Load two files or paste them, then compare. If both are zone files, the app also compares records semantically.</p></div>`}</div>
   </section>
@@ -167,6 +168,7 @@ export async function renderCompare(view, query) {
     }
   }
 
+  mountUploadGate(view);
   return null;
 }
 

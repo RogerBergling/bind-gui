@@ -14,7 +14,7 @@ export async function renderAnalyze(view, query) {
   const workspace = getCurrentWorkspace();
   if (!workspace) {
     view.innerHTML = `<div class="page-head"><div class="page-head-copy"><span class="eyebrow">Analyze</span><h1>No workspace to analyze</h1><p class="page-lede">Import named.conf and zone files first. Analysis runs locally and links every finding to the exact file and line.</p></div><div class="page-actions"><button class="btn btn-primary" type="button" data-import-files>${icon('upload', 16)} Import files</button><button class="btn" type="button" data-import-folder>${icon('folder', 16)} Import folder</button></div></div>
-    <div class="start-panel"><div class="start-copy"><h2>Bring the whole include tree</h2><p>For delegation and DNSSEC checks, import the parent and child zones together. Missing files are reported, not guessed.</p></div><div class="dropzone" data-dropzone tabindex="0" role="button"><div class="dropzone-icon">${icon('upload', 24)}</div><strong>Drop files or a folder</strong><span>named.conf, includes, zones, ZIP</span></div></div>`;
+    <div class="start-panel"><div class="start-copy"><h2>Bring the whole include tree</h2><p>For delegation and DNSSEC checks, import the parent and child zones together. Missing files are reported, not guessed.</p></div><div class="dropzone" data-dropzone tabindex="0" role="button"><div class="dropzone-icon">${icon('upload', 24)}</div><strong>Drop files or a folder</strong><span>named.conf, includes, zones, ZIP</span></div><div data-upload-gate></div></div>`;
     wireImportControls(view, { navigate: true });
     return null;
   }

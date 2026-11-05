@@ -162,6 +162,7 @@ export async function renderHome(view) {
         <span>or use the buttons to browse</span>
         <small>Files are read locally with the browser File API</small>
       </div>
+      <div data-upload-gate></div>
     </section>
 
     <section class="section-block">

@@ -456,6 +456,7 @@ export async function renderWorkbench(view, param, query) {
         <a class="btn btn-ghost" href="#/analyze">${icon('shield', 16)} Analyze</a>
       </div>
     </div>
+    <div data-upload-gate></div>
     <div class="workbench-shell">
       <aside class="file-rail" aria-label="Workspace files">
         <div class="file-rail-head">
@@ -789,6 +790,7 @@ function workspaceEmptyState(title = 'No workspace loaded', body = 'Import named
   <div class="start-panel">
     <div class="start-copy"><span class="eyebrow">Start here</span><h2>Drop a folder or a ZIP</h2><p>Folder import preserves paths so includes and zone files resolve correctly. A single named.conf works too; unresolved includes are reported.</p><div class="start-actions"><button class="btn btn-primary" type="button" data-import-files>${icon('upload', 16)} Choose files</button><button class="btn" type="button" data-import-folder>${icon('folder', 16)} Choose folder</button></div><p class="muted-note">${icon('info', 14)} Files are read with the browser File API. Nothing is uploaded.</p></div>
     <div class="dropzone" data-dropzone tabindex="0" role="button" aria-label="Drop BIND configuration files here"><div class="dropzone-icon">${icon('upload', 24)}</div><strong>Drop files here</strong><span>named.conf, zones, includes, ZIP</span><small>Local-first</small></div>
+    <div data-upload-gate></div>
   </div>`;
 }
 
