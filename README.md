@@ -68,7 +68,7 @@ When the variable is set:
 - Application scripts and JSON files return `401` until authenticated.
 - The password is checked server-side with `hmac.compare_digest`; it is never embedded in HTML or JavaScript.
 - A successful login creates a random, `HttpOnly`, `SameSite=Strict` session cookie. Sessions live in process memory and expire after 12 hours by default (`BIND_WORKBENCH_SESSION_HOURS`).
-- Five failed attempts per IP within a minute trigger a temporary `429` throttle.
+- Five failed attempts per IP within a minute trigger a temporary `429` throttle. Behind a reverse proxy the client IP is the proxy address, so the throttle is shared; enforce login rate limiting at the proxy as well.
 - The top bar shows a lock button when auth is enabled; it clears the session and returns to the login page.
 - The password protects the whole app, not just a single upload route. Configurations still never leave the browser.
 
@@ -456,7 +456,7 @@ tests/                         # Node test runner suites
 
 ### Build metadata
 
-`Dockerfile` accepts `APP_VERSION`, `IMAGE_TAG`, `GIT_SHA` and `BUILD_DATE`, writes them to `public/version.json`, and labels the image. The home page shows version, image tag, commit, build time and a live browser clock; the footer repeats the build stamp.
+`Dockerfile` accepts `APP_VERSION`, `IMAGE_TAG`, `GIT_SHA` and `BUILD_DATE`, writes them to `public/version.json`, and labels the image. The home page and footer show version, build number, image tag, commit, UTC build time and a live 24-hour browser clock. The build number is derived from `BUILD_DATE` as `YYYYMMDD.HHMM`, build time is always displayed in UTC, and the clock is forced to a 24-hour cycle in every locale.
 
 ### Publishing to GHCR
 

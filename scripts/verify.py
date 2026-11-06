@@ -146,6 +146,13 @@ def check_html() -> None:
         fail("public/index.html loads an external script")
     if "fonts.googleapis" in html or "cdn.jsdelivr" in html or "unpkg.com" in html:
         fail("public/index.html references a third-party asset host")
+    for marker in ("data-build-number", "data-live-clock", "data-build-date"):
+        if marker not in html:
+            fail(f"public/index.html lacks the build stamp slot {marker!r}")
+    version_js = read(PUBLIC / "assets/js/version.js")
+    for marker in ("hourCycle: 'h23'", "data-build-number", "buildNumber", "formatBuildDate"):
+        if marker not in version_js:
+            fail(f"public/assets/js/version.js lacks the build/clock marker {marker!r}")
 
 
 def check_login_page() -> None:

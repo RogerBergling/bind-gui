@@ -188,7 +188,7 @@ export async function renderWorkbench(view, param, query) {
     `;
     const status = view.querySelector('#analysis-status');
     if (status) {
-      status.textContent = analysis ? `Analyzed ${new Date(analysis.analyzedAt).toLocaleTimeString()}` : 'Analysis pending…';
+      status.textContent = analysis ? `Analyzed ${new Date(analysis.analyzedAt).toLocaleTimeString(undefined, { hourCycle: 'h23' })}` : 'Analysis pending…';
     }
   }
 
@@ -481,7 +481,7 @@ export async function renderWorkbench(view, param, query) {
           <div class="tabbar" role="tablist" aria-label="Workbench views">
             ${[['source', 'Source', 'code'], ['structure', 'Structure', 'list'], ['zones', 'Zones', 'database'], ['learn', 'Learn this config', 'book']].map(([id, label, iconName]) => `<button class="tab" role="tab" type="button" aria-selected="${activeTab === id}" data-tab="${id}">${icon(iconName, 15)} ${label}${id === 'zones' ? `<span class="tab-count">${model?.zones?.length || 0}</span>` : ''}</button>`).join('')}
           </div>
-          <span class="tabbar-status" id="analysis-status">${analysis ? `Analyzed ${new Date(analysis.analyzedAt).toLocaleTimeString()}` : 'Analyzing…'}</span>
+          <span class="tabbar-status" id="analysis-status">${analysis ? `Analyzed ${new Date(analysis.analyzedAt).toLocaleTimeString(undefined, { hourCycle: 'h23' })}` : 'Analyzing…'}</span>
         </div>
         <div class="tab-panel">${panelHtml()}</div>
       </div>

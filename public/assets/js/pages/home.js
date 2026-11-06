@@ -10,9 +10,11 @@ import { GLOSSARY } from '../data/glossary.js';
 import { RECORD_DOCS } from '../data/records.js';
 import { icon, pill, scoreGauge } from '../ui.js';
 import { escapeHTML, formatDate, formatNumber } from '../utils.js';
+import { buildNumber, formatBuildDate, loadBuildInfo } from '../version.js';
 import { wireImportControls } from './import-ui.js';
 
 export async function renderHome(view) {
+  const info = await loadBuildInfo();
   const current = getCurrentWorkspace();
   let resume = null;
   if (current) {
@@ -28,10 +30,11 @@ export async function renderHome(view) {
   const buildCard = `<div class="build-card">
     <div class="build-card-head"><span class="status-dot"></span><div><strong>This build</strong><span>Static container · optional auth · no config API</span></div></div>
     <div class="build-grid">
-      <div><span>Version</span><strong data-app-version>dev</strong></div>
-      <div><span>Image</span><strong data-image-tag>local</strong></div>
-      <div><span>Commit</span><strong><a data-commit-link><span data-commit>local</span></a></strong></div>
-      <div><span>Built</span><strong data-build-date>local build</strong></div>
+      <div><span>Version</span><strong data-app-version>${escapeHTML(info.version)}</strong></div>
+      <div><span>Build</span><strong data-build-number>${escapeHTML(buildNumber(info.buildDate))}</strong></div>
+      <div><span>Image</span><strong data-image-tag>${escapeHTML(info.imageTag)}</strong></div>
+      <div><span>Commit</span><strong><a data-commit-link><span data-commit>${escapeHTML(info.commit === 'local' ? 'local' : info.commit.slice(0, 12))}</span></a></strong></div>
+      <div><span>Built</span><strong data-build-date>${escapeHTML(formatBuildDate(info.buildDate))}</strong></div>
     </div>
     <div class="build-clock">${icon('clock', 18)}<div><span>Your browser clock</span><time data-live-clock>local time</time></div></div>
     <p class="build-note">Build metadata is baked into <code>version.json</code> by the Docker build. Local runs show dev/local.</p>
@@ -110,9 +113,10 @@ export async function renderHome(view) {
           <a class="btn btn-ghost btn-lg" href="#/workbench">${icon('grid', 17)} Open workbench</a>
         </div>
         <div class="home-buildline">
-          <span><em>version</em><strong data-app-version>dev</strong></span>
-          <span><em>image</em><strong data-image-tag>local</strong></span>
-          <span><em>commit</em><a data-commit-link><strong data-commit>local</strong></a></span>
+          <span><em>version</em><strong data-app-version>${escapeHTML(info.version)}</strong></span>
+          <span><em>build</em><strong data-build-number>${escapeHTML(buildNumber(info.buildDate))}</strong></span>
+          <span><em>commit</em><a data-commit-link><strong data-commit>${escapeHTML(info.commit === 'local' ? 'local' : info.commit.slice(0, 12))}</strong></a></span>
+          <span><em>built</em><strong data-build-date>${escapeHTML(formatBuildDate(info.buildDate))}</strong></span>
           <span class="home-live-time"><em>now</em><time data-live-clock>local time</time></span>
         </div>
         <div class="hero-trust">
