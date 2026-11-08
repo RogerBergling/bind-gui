@@ -16,7 +16,7 @@ import { recordDoc } from '../data/records.js';
 import { zoneDnssecInventory } from '../dns/dnssec.js';
 import { icon, openModal, pill, toast, confirmDialog, wireCopyButtons } from '../ui.js';
 import { formatTTL } from '../dns/syntax.js';
-import { escapeHTML, formatBytes, formatNumber, lineCount } from '../utils.js';
+import { escapeHTML, formatBytes, formatNumber, lineCount, shellQuote } from '../utils.js';
 import { wireImportControls } from './import-ui.js';
 
 export async function renderWorkbench(view, param, query) {
@@ -345,7 +345,7 @@ export async function renderWorkbench(view, param, query) {
         <div class="zone-actions">
           ${zone.filePath ? `<button class="btn btn-sm btn-ghost" type="button" data-goto-file="${escapeHTML(zone.filePath)}" data-goto-line="1">${icon('code', 14)} Open file</button>` : ''}
           <a class="btn btn-sm" href="#/live?tab=verify&zone=${encodeURIComponent(zone.name)}">${icon('globe', 14)} Verify live</a>
-          ${zone.filePath ? `<button class="btn btn-sm btn-ghost" type="button" data-copy="named-checkzone '${escapeHTML(zone.name)}' '${escapeHTML(zone.filePath)}'">${icon('terminal', 14)} named-checkzone</button>` : ''}
+          ${zone.filePath ? `<button class="btn btn-sm btn-ghost" type="button" data-copy="${escapeHTML(`named-checkzone ${shellQuote(zone.name)} ${shellQuote(zone.filePath)}`)}">${icon('terminal', 14)} named-checkzone</button>` : ''}
         </div>
       </div>
       <div class="zone-body">

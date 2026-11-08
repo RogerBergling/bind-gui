@@ -6,6 +6,7 @@ import {
   bytesToHex,
   concatBytes,
   hexToBytes,
+  shellQuote,
   utf8,
 } from '../utils.js';
 import { labelsOf, nameToWire, normalizeName, parentName } from './names.js';
@@ -717,7 +718,8 @@ export async function auditDnssec(name, resolver = 'cloudflare', options = {}) {
 
 export function auditDigCommands(audit, resolver = 'cloudflare') {
   const server = resolver === 'google' ? '8.8.8.8' : '1.1.1.1';
-  const apex = audit.apex;
+  const apex = shellQuote(audit.apex);
+  const denialName = shellQuote(audit.denial?.randomName || `random.${audit.apex}`);
   const commands = [
     `dig @${server} ${apex} DNSKEY +dnssec +multi`,
     `dig @${server} ${apex} DS +dnssec +multi`,
@@ -728,9 +730,11 @@ export function auditDigCommands(audit, resolver = 'cloudflare') {
     `dig @${server} ${apex} MX +dnssec +multi`,
     `dig @${server} ${apex} TXT +dnssec +multi`,
     `dig @${server} ${apex} NSEC +dnssec +multi`,
-    `dig @${server} ${audit.denial?.randomName || `random.${apex}`} A +dnssec +comments`,
+    `dig @${server} ${denialName} A +dnssec +comments`,
   ];
-  if (audit.denial?.hash?.base32) commands.push(`dig @${server} ${audit.denial.hash.base32}.${apex} NSEC3 +dnssec +multi`);
+  if (audit.denial?.hash?.base32) {
+    commands.push(`dig @${server} ${shellQuote(`${audit.denial.hash.base32}.${audit.apex}`)} NSEC3 +dnssec +multi`);
+  }
   commands.push(`delv @${server} ${apex} DNSKEY +rtrace`);
   commands.push(`dig +trace ${apex} DNSKEY +dnssec`);
   return commands;

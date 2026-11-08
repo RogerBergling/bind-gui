@@ -56,5 +56,5 @@ test('converts an IP PTR lookup to the reverse name and -x command', async () =>
   // the command builder, which is deterministic.
   const commands = buildDigCommands({ name: '192.0.2.80', type: 'PTR', resolver: 'cloudflare', dnssec: true });
   assert.ok(commands.some((item) => item.command.includes('80.2.0.192.in-addr.arpa.')));
-  assert.ok(commands.some((item) => item.command.includes('-x 192.0.2.80')));
+  assert.ok(commands.some((item) => item.command.includes("-x '192.0.2.80'")));
 });

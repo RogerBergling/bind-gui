@@ -32,14 +32,14 @@ function verifierCommands(model) {
   for (const zone of model?.zones || []) {
     const name = zoneDisplayName(zone);
     if (!name || name === '.' || !zone.parsed) continue;
-    commands.push(`dig @${server} ${zone.name} NS +dnssec +multi`);
-    commands.push(`dig @${server} ${zone.name} SOA +dnssec +multi`);
+    commands.push(`dig @${server} ${shellQuote(zone.name)} NS +dnssec +multi`);
+    commands.push(`dig @${server} ${shellQuote(zone.name)} SOA +dnssec +multi`);
     if ((zone.parsed.records || []).some((record) => record.type === 'MX')) {
-      commands.push(`dig @${server} ${zone.name} MX +dnssec +multi`);
+      commands.push(`dig @${server} ${shellQuote(zone.name)} MX +dnssec +multi`);
     }
-    commands.push(`dig @${server} ${zone.name} DS +dnssec +multi`);
-    commands.push(`dig @${server} ${zone.name} DNSKEY +dnssec +multi`);
-    commands.push(`dig +trace ${zone.name} NS +dnssec`);
+    commands.push(`dig @${server} ${shellQuote(zone.name)} DS +dnssec +multi`);
+    commands.push(`dig @${server} ${shellQuote(zone.name)} DNSKEY +dnssec +multi`);
+    commands.push(`dig +trace ${shellQuote(zone.name)} NS +dnssec`);
   }
   return Array.from(new Set(commands));
 }

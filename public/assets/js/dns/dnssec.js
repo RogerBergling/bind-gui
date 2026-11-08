@@ -1,6 +1,6 @@
 /* DNSSEC key-tag, DS digest, offline matching and online chain inspection. */
 
-import { base64ToBytes, bytesToHex, concatBytes } from '../utils.js';
+import { base64ToBytes, bytesToHex, concatBytes, shellQuote } from '../utils.js';
 import { labelsOf, nameToWire, normalizeName, parentName } from './names.js';
 import { parseDnssecTime } from './syntax.js';
 import { algorithmInfo, digestInfo } from './types.js';
@@ -304,12 +304,12 @@ export function chainDigCommands(chain, resolver = 'cloudflare') {
   for (const item of chain || []) {
     commands.push({
       label: `DS for ${item.zone}`,
-      command: `dig @${server} ${item.zone} DS +dnssec +multi`,
+      command: `dig @${server} ${shellQuote(item.zone)} DS +dnssec +multi`,
       explanation: 'DS lives in the parent zone and commits to a DNSKEY in the child zone.',
     });
     commands.push({
       label: `DNSKEY for ${item.zone}`,
-      command: `dig @${server} ${item.zone} DNSKEY +dnssec +multi`,
+      command: `dig @${server} ${shellQuote(item.zone)} DNSKEY +dnssec +multi`,
       explanation: 'DNSKEY lives at the zone apex. Compare its key tag and digest with the parent DS.',
     });
   }

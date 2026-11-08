@@ -1,6 +1,7 @@
 /* DNS-over-HTTPS client and dig command builder. */
 
 import { isValidIPv4, isValidIPv6, normalizeName, reverseIpName } from './names.js';
+import { shellQuote } from '../utils.js';
 import { normalizeRdataForCompare } from './syntax.js';
 import { normalizeType, rcodeName, typeCode, typeName } from './types.js';
 
@@ -198,39 +199,39 @@ export function buildDigCommands({ name, type = 'A', resolver = 'cloudflare', dn
   const commands = [
     {
       label: 'Primary lookup',
-      command: `dig @${server} ${queryName} ${queryType}${dnssecFlag} +multi`,
+      command: `dig @${server} ${shellQuote(queryName)} ${queryType}${dnssecFlag} +multi`,
       explanation: `Ask ${selected.name} (${selected.address}) directly over classic DNS. +multi prints one resource record per line; +dnssec asks for DNSSEC records.`,
     },
     {
       label: 'Short answer',
-      command: `dig @${server} ${queryName} ${queryType} +short${dnssecFlag}`,
+      command: `dig @${server} ${shellQuote(queryName)} ${queryType} +short${dnssecFlag}`,
       explanation: '+short prints only the RDATA. It is convenient for scripts, but it hides flags, authority and DNSSEC status.',
     },
     {
       label: 'See the DNSSEC status',
-      command: `dig @${server} ${queryName} ${queryType} +dnssec +comments +stats`,
+      command: `dig @${server} ${shellQuote(queryName)} ${queryType} +dnssec +comments +stats`,
       explanation: 'The flags line shows qr, rd, ra and ad. The ad (authenticated data) bit means the resolver validated DNSSEC for this answer.',
     },
     {
       label: 'Check the chain',
-      command: `dig @${server} ${queryName} DNSKEY +dnssec +multi\n dig @${server} ${queryName} DS +dnssec +multi\n dig @${server} ${queryName} A +dnssec +trace`,
+      command: `dig @${server} ${shellQuote(queryName)} DNSKEY +dnssec +multi\n dig @${server} ${shellQuote(queryName)} DS +dnssec +multi\n dig @${server} ${shellQuote(queryName)} A +dnssec +trace`,
       explanation: 'DNSKEY lives in the zone, DS lives in the parent. +trace follows the delegation from the root, showing where validation could break.',
     },
     {
       label: 'Disable validation (diagnose bogus data)',
-      command: `dig @${server} ${queryName} ${queryType} +dnssec +cd +comments`,
+      command: `dig @${server} ${shellQuote(queryName)} ${queryType} +dnssec +cd +comments`,
       explanation: '+cd sets the Checking Disabled bit. It shows the unvalidated data so you can compare it with the validated answer. Never treat a +cd answer as trustworthy.',
     },
     {
       label: 'Ask the authoritative server',
-      command: `dig @ns1.example.com ${queryName} ${queryType} +norecurse +dnssec +multi`,
+      command: `dig @ns1.example.com ${shellQuote(queryName)} ${queryType} +norecurse +dnssec +multi`,
       explanation: 'Replace ns1.example.com with the zone NS. +norecurse prevents the server from recursing; authoritative servers should answer directly.',
     },
   ];
   if (queryType === 'PTR' || isValidIPv4(rawName) || isValidIPv6(rawName)) {
     commands.unshift({
       label: 'Reverse lookup (-x)',
-      command: `dig @${server} -x ${rawName} +dnssec +multi`,
+      command: `dig @${server} -x ${shellQuote(rawName)} +dnssec +multi`,
       explanation: '-x automatically converts an IP address into the in-addr.arpa or ip6.arpa name and queries PTR.',
     });
   }
@@ -238,7 +239,7 @@ export function buildDigCommands({ name, type = 'A', resolver = 'cloudflare', dn
 }
 
 export function digTraceCommand(name, type = 'A') {
-  return `dig +trace ${normalizeName(name)} ${normalizeType(type)} +dnssec`;
+  return `dig +trace ${shellQuote(normalizeName(name))} ${normalizeType(type)} +dnssec`;
 }
 
 export function explainDohLimits() {

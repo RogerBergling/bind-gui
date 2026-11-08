@@ -60,16 +60,46 @@ async function deflateRaw(bytes) {
   }
 }
 
-async function inflateRaw(bytes) {
+async function inflateRaw(bytes, options = {}) {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('This browser cannot decompress deflated ZIP entries. Re-export the bundle as a stored ZIP or use a modern browser.');
   }
+  const maxOutputSize = options.maxOutputSize ?? 10 * 1024 * 1024;
+  const maxCompressionRatio = options.maxCompressionRatio ?? 200;
+  // Allow small legitimate files to compress heavily without letting a tiny
+  // payload expand into an unbounded allocation.
+  const ratioLimit = Math.max(64 * 1024, bytes.length * maxCompressionRatio);
+  const limit = Math.min(maxOutputSize, ratioLimit);
   const stream = new DecompressionStream('deflate-raw');
   const writer = stream.writable.getWriter();
-  writer.write(bytes);
-  writer.close();
-  const response = new Response(stream.readable);
-  return new Uint8Array(await response.arrayBuffer());
+  writer.write(bytes).catch(() => {});
+  writer.close().catch(() => {});
+  const reader = stream.readable.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        const error = new Error(`decompressed data exceeds the ${Math.round(limit / 1024)} KiB limit`);
+        error.produced = total;
+        throw error;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
 
 /**
@@ -196,7 +226,7 @@ function safeZipPath(path) {
 /**
  * Read a ZIP archive. Deflate entries require DecompressionStream.
  * @param {ArrayBuffer|Uint8Array} input
- * @param {{maxEntries?: number, maxFileSize?: number, maxTotalSize?: number}} options
+ * @param {{maxEntries?: number, maxFileSize?: number, maxTotalSize?: number, maxCompressionRatio?: number}} options
  */
 export async function readZip(input, options = {}) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
@@ -204,6 +234,7 @@ export async function readZip(input, options = {}) {
   const maxEntries = options.maxEntries ?? 2000;
   const maxFileSize = options.maxFileSize ?? 10 * 1024 * 1024;
   const maxTotalSize = options.maxTotalSize ?? 50 * 1024 * 1024;
+  const maxCompressionRatio = options.maxCompressionRatio ?? 200;
   const eocd = findEndOfCentralDirectory(view);
   if (eocd < 0) throw new Error('This file is not a readable ZIP archive.');
   const totalEntries = view.getUint16(eocd + 10, true);
@@ -219,6 +250,7 @@ export async function readZip(input, options = {}) {
   const warnings = [];
   let cursor = centralOffset;
   let totalUncompressed = 0;
+  let actualUncompressed = 0;
 
   for (let index = 0; index < totalEntries; index += 1) {
     if (cursor + 46 > bytes.length || view.getUint32(cursor, true) !== CENTRAL_SIGNATURE) {
@@ -272,14 +304,25 @@ export async function readZip(input, options = {}) {
       contentBytes = payload;
     } else if (method === 8) {
       try {
-        contentBytes = await inflateRaw(payload);
+        contentBytes = await inflateRaw(payload, {
+          maxOutputSize: Math.min(maxFileSize, Math.max(0, maxTotalSize - actualUncompressed)),
+          maxCompressionRatio,
+        });
       } catch (error) {
+        actualUncompressed += Number(error.produced) || 0;
+        if (actualUncompressed > maxTotalSize) {
+          throw new Error(`The archive expands to more than ${Math.round(maxTotalSize / 1024 / 1024)} MiB.`);
+        }
         warnings.push(`Could not decompress ${rawName}: ${error.message}`);
         continue;
       }
     } else {
       warnings.push(`Skipped ${rawName}: unsupported compression method ${method}.`);
       continue;
+    }
+    actualUncompressed += contentBytes.length;
+    if (actualUncompressed > maxTotalSize) {
+      throw new Error(`The archive expands to more than ${Math.round(maxTotalSize / 1024 / 1024)} MiB.`);
     }
     if (contentBytes.length !== uncompressedSize) {
       warnings.push(`Skipped ${rawName}: size mismatch after decompression.`);

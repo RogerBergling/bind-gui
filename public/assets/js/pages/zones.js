@@ -7,7 +7,7 @@ import { getCurrentWorkspace } from '../storage.js';
 import { recordDoc } from '../data/records.js';
 import { icon, pill, wireCopyButtons } from '../ui.js';
 import { formatTTL } from '../dns/syntax.js';
-import { escapeHTML, formatNumber } from '../utils.js';
+import { escapeHTML, formatNumber, shellQuote } from '../utils.js';
 import { wireImportControls } from './import-ui.js';
 
 export async function renderZones(view, param, query) {
@@ -89,7 +89,7 @@ function renderZone(zone, index, selectedZone, analysis) {
       <div class="zone-actions zone-actions-bottom">
         ${zone.filePath ? `<button class="btn btn-sm btn-ghost" type="button" data-goto-file="${escapeHTML(zone.filePath)}" data-goto-line="1">${icon('code', 14)} Open source</button>` : ''}
         <a class="btn btn-sm" href="#/live?tab=verify&zone=${encodeURIComponent(zone.name)}">${icon('globe', 14)} Verify live</a>
-        ${zone.filePath ? `<button class="btn btn-sm btn-ghost" type="button" data-copy="named-checkzone '${escapeHTML(zone.name)}' '${escapeHTML(zone.filePath)}'">${icon('terminal', 14)} named-checkzone</button>` : ''}
+        ${zone.filePath ? `<button class="btn btn-sm btn-ghost" type="button" data-copy="${escapeHTML(`named-checkzone ${shellQuote(zone.name)} ${shellQuote(zone.filePath)}`)}">${icon('terminal', 14)} named-checkzone</button>` : ''}
       </div>
       <div class="zone-records-toolbar">
         <div class="search-field">${icon('search', 15)}<input type="search" placeholder="Filter owner, type or RDATA…" data-zone-search="${index}" aria-label="Filter records"></div>

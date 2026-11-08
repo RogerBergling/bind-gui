@@ -6,6 +6,7 @@ import { readZip } from './zip.js';
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 1500;
+const MAX_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024;
 const GENERATED_FILES = new Set([
   'BIND-WORKBENCH-MANIFEST.json',
   'validate.sh',
@@ -78,7 +79,11 @@ export async function workspaceFromFileList(fileList, options = {}) {
     if (lower.endsWith('.zip')) {
       try {
         const buffer = await readFileBuffer(file);
-        const archive = await readZip(buffer);
+        const archive = await readZip(buffer, {
+          maxEntries: MAX_FILES,
+          maxFileSize: MAX_FILE_BYTES,
+          maxTotalSize: MAX_ARCHIVE_TOTAL_BYTES,
+        });
         for (const entry of archive.files) {
           if (GENERATED_FILES.has(entry.path)) {
             if (entry.path === 'bind-workbench-workspace.json' && !restored) {

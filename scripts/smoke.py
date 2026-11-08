@@ -7,6 +7,7 @@ import http.client
 import contextlib
 import json
 import os
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -121,6 +122,16 @@ def run_auth_tests(failures: list[str]) -> None:
         if "Set-Cookie" in headers:
             failures.append("Wrong password returned a session cookie")
 
+        status, _, body = auth_request(
+            port,
+            "/api/login",
+            "POST",
+            {"Content-Type": "application/json"},
+            b"\xff\xfe",
+        )
+        if status != 401 or b"Invalid password" not in body:
+            failures.append("Malformed login body did not return a generic 401")
+
         status, headers, body = auth_request(
             port,
             "/api/login",
@@ -181,8 +192,57 @@ def run_auth_tests(failures: list[str]) -> None:
             os.unlink(env_handle.name)
 
 
+def run_env_permission_test(failures: list[str]) -> None:
+    port = free_port()
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False)
+    handle.write("# smoke test env file\n")
+    handle.close()
+    os.chmod(handle.name, 0o644)
+    env = {**os.environ, "BIND_WORKBENCH_ENV_FILE": handle.name}
+    env.pop("BIND_WORKBENCH_PASSWORD", None)
+    process = subprocess.Popen(
+        [sys.executable, str(ROOT / "start.py"), "--host", HOST, "--port", str(port), "--no-browser"],
+        cwd=str(ROOT),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        wait_for(port)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+        stderr = process.stderr.read().decode("utf-8", "replace") if process.stderr else ""
+        with contextlib.suppress(OSError):
+            os.unlink(handle.name)
+    if "readable by group or others" not in stderr:
+        failures.append("Group/world-readable .env file did not produce a warning")
+
+
 def main() -> int:
     port = free_port()
+    outside = Path(tempfile.mkdtemp(prefix="bind-smoke-"))
+    secret = outside / "secret.txt"
+    secret.write_text("SMOKE-SECRET\n", encoding="utf-8")
+    escape_dir = ROOT / "public" / "__smoke_escape__"
+    escape_file = ROOT / "public" / "__smoke_escape__.txt"
+    symlinks_ready = True
+    try:
+        escape_dir.mkdir()
+        (escape_dir / "index.html").symlink_to(secret)
+        escape_file.symlink_to(secret)
+    except OSError:
+        symlinks_ready = False
+        with contextlib.suppress(OSError):
+            escape_file.unlink()
+        with contextlib.suppress(OSError):
+            (escape_dir / "index.html").unlink()
+        with contextlib.suppress(OSError):
+            escape_dir.rmdir()
+
     process = subprocess.Popen(
         [sys.executable, str(ROOT / "start.py"), "--host", HOST, "--port", str(port), "--no-browser"],
         cwd=str(ROOT),
@@ -263,20 +323,47 @@ def main() -> int:
         if traversal_status == 200 and b"BIND Workbench" not in traversal_body:
             failures.append("Unexpected traversal response")
 
+        if symlinks_ready:
+            status, _, body = request_raw(port, "/__smoke_escape__/")
+            if status != 404 or b"SMOKE-SECRET" in body:
+                failures.append("Directory-index symlink escaped public/")
+            status, _, body = request_raw(port, "/__smoke_escape__.txt")
+            if status != 404 or b"SMOKE-SECRET" in body:
+                failures.append("File symlink escaped public/")
+
+        try:
+            with socket.create_connection((HOST, port), timeout=3) as raw:
+                raw.sendall(b"GET /%00 HTTP/1.0\r\nHost: localhost\r\n\r\n")
+                malformed_response = raw.recv(4096)
+            if not malformed_response.startswith((b"HTTP/1.0 400", b"HTTP/1.0 404")):
+                failures.append("Malformed request did not return a generic 400/404")
+            if b"Traceback" in malformed_response:
+                failures.append("Malformed request exposed a traceback")
+        except OSError as error:
+            failures.append(f"Malformed request test failed: {error}")
+
         run_auth_tests(failures)
+        run_env_permission_test(failures)
     finally:
         process.terminate()
         try:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             process.kill()
+        with contextlib.suppress(OSError):
+            escape_file.unlink()
+        with contextlib.suppress(OSError):
+            (escape_dir / "index.html").unlink()
+        with contextlib.suppress(OSError):
+            escape_dir.rmdir()
+        shutil.rmtree(outside, ignore_errors=True)
 
     print("BIND Workbench HTTP smoke test")
     if failures:
         for failure in failures:
             print(f"  error: {failure}")
         return 1
-    print("  headers, MIME types, routing, containment and password gate: OK")
+    print("  headers, MIME types, routing, containment, malformed requests, .env permissions and password gate: OK")
     return 0
 
 
