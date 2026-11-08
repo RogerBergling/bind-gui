@@ -24,7 +24,8 @@ services:
     ports:
       - "127.0.0.1:8005:8005"
     restart: unless-stopped
-    pull_policy: always
+    # Pin a reviewed digest in production. Update explicitly with `docker compose pull`.
+    pull_policy: if_not_present
     read_only: true
     environment:
       # Optional. Set BIND_WORKBENCH_PASSWORD in .env or the shell to require
