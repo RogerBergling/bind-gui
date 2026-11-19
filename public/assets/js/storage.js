@@ -1,5 +1,6 @@
 /* Browser-local storage for the current workspace, snapshots and settings. */
 
+import { sanitizeCustomResolvers } from './dns/doh.js';
 import { workspaceFingerprint } from './dns/workspace.js';
 
 const PREFIX = 'bind-workbench:v1';
@@ -11,6 +12,8 @@ const DEFAULT_SETTINGS = {
   theme: null,
   onlineConsent: false,
   resolver: 'cloudflare',
+  compareResolvers: ['cloudflare', 'google'],
+  customResolvers: [],
   historyLimit: 100,
   showSecrets: false,
 };
@@ -42,13 +45,30 @@ function writeJSON(key, value) {
 }
 
 export function getSettings() {
-  return { ...DEFAULT_SETTINGS, ...readJSON(SETTINGS_KEY, {}) };
+  const merged = { ...DEFAULT_SETTINGS, ...readJSON(SETTINGS_KEY, {}) };
+  return {
+    ...merged,
+    compareResolvers: Array.isArray(merged.compareResolvers)
+      ? merged.compareResolvers.filter((id) => typeof id === 'string').slice(0, 2)
+      : DEFAULT_SETTINGS.compareResolvers,
+    customResolvers: sanitizeCustomResolvers(merged.customResolvers),
+  };
 }
 
 export function saveSettings(patch) {
   const next = { ...getSettings(), ...patch };
+  if ('customResolvers' in patch) next.customResolvers = sanitizeCustomResolvers(next.customResolvers);
+  if ('compareResolvers' in patch) {
+    next.compareResolvers = Array.isArray(next.compareResolvers)
+      ? next.compareResolvers.filter((id) => typeof id === 'string').slice(0, 2)
+      : DEFAULT_SETTINGS.compareResolvers;
+  }
   const result = writeJSON(SETTINGS_KEY, next);
   return { ...result, settings: next };
+}
+
+export function saveCustomResolvers(customResolvers) {
+  return saveSettings({ customResolvers });
 }
 
 export function getCurrentWorkspace() {

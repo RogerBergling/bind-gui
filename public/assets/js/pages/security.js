@@ -14,7 +14,7 @@ export function renderSecurity(view) {
       <div class="security-arrow">${icon('arrow', 18)}<span>static files + optional auth</span></div>
       <div class="security-node server"><span>${icon('server', 22)}</span><strong>Container</strong><small>Python stdlib static server · GET/HEAD · no write path</small></div>
       <div class="security-arrow optional">${icon('globe', 18)}<span>opt-in only</span></div>
-      <div class="security-node doh"><span>${icon('globe', 22)}</span><strong>DoH resolver</strong><small>Cloudflare or Google · query name/type only</small></div>
+      <div class="security-node doh"><span>${icon('globe', 22)}</span><strong>DoH resolver</strong><small>Cloudflare, Google or a custom HTTPS endpoint · query name/type only</small></div>
     </div>
     <div class="privacy-facts">
       <div class="fact">${icon('check', 18)}<div><strong>No server-side config handling</strong><span>The container never receives a configuration file or zone record.</span></div></div>
@@ -33,7 +33,7 @@ export function renderSecurity(view) {
       <tr><td>Settings and theme</td><td>localStorage</td><td>No</td><td>Includes the online-lookup consent flag.</td></tr>
       <tr><td>Password session (optional)</td><td>Server memory + HttpOnly cookie</td><td>No configuration data</td><td>Only when <code>BIND_WORKBENCH_PASSWORD</code> is set. The password is compared server-side; the cookie contains a random session token.</td></tr>
       <tr><td>Import password check (optional)</td><td>Server memory / request header</td><td>No configuration data</td><td>Only when <code>BIND_WORKBENCH_UPLOAD_PASSWORD</code> or the app password is set. The password is checked before the browser reads a file; only a per-tab unlocked flag is stored.</td></tr>
-      <tr><td>Live DNS query name/type</td><td>Selected DoH resolver</td><td>Yes, only after opt-in</td><td>DoH endpoint receives the queried name and type. Configuration files are never included.</td></tr>
+      <tr><td>Live DNS query name/type</td><td>Selected DoH resolver</td><td>Yes, only after opt-in</td><td>The DoH endpoint receives the queried name and type. Configuration files are never included. A custom resolver URL is stored only in localStorage.</td></tr>
       <tr><td>Downloaded exports</td><td>Your filesystem</td><td>As a file you request</td><td>Plaintext, possibly including TSIG secrets found in source files.</td></tr>
     </tbody></table></div>
   </section>
@@ -55,13 +55,14 @@ export function renderSecurity(view) {
 
   <section class="section-block">
     <div class="section-head"><div><span class="eyebrow">Live DNS exception</span><h2>Why DoH is different</h2></div></div>
-    <div class="callout warn">${icon('warning', 18)}<div><strong>Online lookups are opt-in</strong><p>A browser cannot open UDP/TCP port 53, so this app uses DNS-over-HTTPS JSON from Cloudflare (1.1.1.1) and Google (8.8.8.8). When you enable lookups and run a query, the selected resolver sees the DNS name and type you asked for. It also sees your IP address, as any internet service does. The app does not send your configuration, findings, history or file names.</p></div></div>
+    <div class="callout warn">${icon('warning', 18)}<div><strong>Online lookups are opt-in</strong><p>A browser cannot open UDP/TCP port 53, so this app uses DNS-over-HTTPS JSON. Cloudflare (1.1.1.1) and Google Public DNS (8.8.8.8) are built in, and you can add your own HTTPS DoH JSON endpoint. When you enable lookups and run a query, the selected resolver sees the DNS name and type you asked for. It also sees your IP address, as any internet service does. The app does not send your configuration, findings, history or file names.</p></div></div>
     <ul class="security-list">
-      <li>Only two DoH origins are allowed by the Content-Security-Policy: <code>https://cloudflare-dns.com</code> and <code>https://dns.google</code>.</li>
-      <li>The app does not accept arbitrary resolver URLs; changing the allow-list requires a source/CSP change and image rebuild.</li>
+      <li>The Content-Security-Policy permits <code>connect-src 'self' https:</code> so a custom HTTPS DoH endpoint can be used without rebuilding the image. The app itself constructs the request only for the resolver you select.</li>
+      <li>Custom resolver URLs must be HTTPS, without embedded credentials. They are validated before use and stored only in this browser’s localStorage.</li>
+      <li>A custom endpoint must support the DoH JSON API and CORS. Plain BIND on UDP/TCP 53 cannot be queried directly by the browser.</li>
       <li>Queries use <code>credentials: 'omit'</code>, <code>referrerPolicy: 'no-referrer'</code> and <code>cache: 'no-store'</code>.</li>
       <li>Turning online lookups off disables all query buttons and keeps the consent flag off until you enable it again.</li>
-      <li>DoH protects the transport. It does not replace DNSSEC validation, and it does not make the resolver’s answer authoritative truth.</li>
+      <li>DoH protects the transport. It does not replace DNSSEC validation, and it does not make the resolver’s answer authoritative truth. A malicious custom resolver can forge or filter answers; add only endpoints you trust.</li>
     </ul>
   </section>
 
@@ -82,7 +83,7 @@ export function renderSecurity(view) {
     <div class="section-head"><div><span class="eyebrow">Transport &amp; container</span><h2>Response headers</h2><p>The local Python server and the container send the same headers. Keep the in-app text and the server code in sync.</p></div></div>
     ${codeBlock(`Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
   img-src 'self' data:; font-src 'self';
-  connect-src 'self' https://cloudflare-dns.com https://dns.google;
+  connect-src 'self' https:;
   object-src 'none'; worker-src 'none'; base-uri 'none';
   frame-ancestors 'none'; form-action 'none'
 Referrer-Policy: no-referrer
@@ -104,7 +105,7 @@ Cache-Control: no-store, no-cache, must-revalidate, max-age=0`, { label: 'HTTP s
   <section class="section-block">
     <div class="section-head"><div><span class="eyebrow">Threat model</span><h2>What this design does not protect</h2></div></div>
     <div class="two-column">
-      <div><h3>Protected by design</h3><ul class="security-list"><li>Configurations are not uploaded to an application server.</li><li>No account or server-side database to breach.</li><li>No third-party scripts or analytics in the page.</li><li>No arbitrary outbound HTTP from the app; only the two DoH origins.</li><li>Strict CSP reduces script injection impact; user content is escaped.</li></ul></div>
+      <div><h3>Protected by design</h3><ul class="security-list"><li>Configurations are not uploaded to an application server.</li><li>No account or server-side database to breach.</li><li>No third-party scripts or analytics in the page.</li><li>DNS queries go only to a resolver you select, over HTTPS; the app has no generic outbound fetch field.</li><li>Strict CSP reduces script injection impact; user content is escaped.</li></ul></div>
       <div><h3>Out of scope</h3><ul class="security-list"><li>A compromised device, browser, extension or hostile server operator serving modified JavaScript.</li><li>Anyone with access to your browser profile or exported files.</li><li>Secrets pasted into configuration text.</li><li>DNS infrastructure security itself: recursion, transfers, DNSSEC keys, firewalls and patching.</li><li>Correctness of the live DNS answer or the BIND binary you deploy.</li></ul></div>
     </div>
   </section>

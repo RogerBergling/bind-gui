@@ -13,7 +13,7 @@ Import → parse → explain → analyze → compare → edit → export
                     opt-in Live DNS / DNSSEC checks (DoH)
 ```
 
-The published container is a static file server with optional password-session endpoints. Parsing, analysis, record inspection, diffing, DNSSEC digest checks, history and export all run in your browser. There is no account system, database, config upload endpoint, analytics script or third-party request — except the opt-in Live DNS queries you explicitly send to Cloudflare or Google. Configuration data never leaves the tab.
+The published container is a static file server with optional password-session endpoints. Parsing, analysis, record inspection, diffing, DNSSEC digest checks, history and export all run in your browser. There is no account system, database, config upload endpoint, analytics script or third-party request — except the opt-in Live DNS queries you explicitly send to Cloudflare, Google or a custom DoH JSON resolver you configure. Configuration data never leaves the tab.
 
 > **MIT licensed. Use at your own risk.** This is an independent tool, not official BIND or ISC software. Generated exports are annotated source bundles, not a deployment system. Always review the change and validate with the exact BIND binary using `named-checkconf`, `named-checkzone`, `dig`/`delv` and a staged deployment.
 
@@ -113,7 +113,7 @@ If you run `python3 start.py` directly, `.env` is loaded from the directory cont
 3. Open **Zones** to browse every record, SOA/NS and DNSSEC state.
 4. Open **Analyze** for explainable errors, warnings, best practices and a pass/review/fail checklist.
 5. Open **Compare** to compare two files, or a saved snapshot with the current workspace.
-6. Enable **Live DNS** only when you want public DNS checks; then verify records or walk the DNSSEC chain.
+6. Enable **Live DNS** only when you want public DNS checks. Optionally add your own HTTPS DoH JSON resolver, then verify records or walk the DNSSEC chain.
 7. Use **Export bundle** to download the multi-file ZIP with a manifest, `validate.sh`, `VALIDATE.md` and `VERIFY.md`.
 8. Save snapshots from the Workbench; review, compare and restore them in **History**.
 
@@ -196,15 +196,24 @@ The score is a review aid, not a certification. The **Best practices** tab is a 
 
 ### Live DNS and DNSSEC: what the world actually sees
 
-Live checks are **explicitly opt-in**. A browser cannot open UDP/TCP port 53, so the app uses DNS-over-HTTPS JSON from:
+Live checks are **explicitly opt-in**. A browser cannot open UDP/TCP port 53, so the app uses DNS-over-HTTPS JSON. Two public resolvers are built in:
 
 - **Cloudflare 1.1.1.1** — `https://cloudflare-dns.com/dns-query`
 - **Google Public DNS 8.8.8.8** — `https://dns.google/resolve`
 
+You can also add your own **custom DoH JSON resolver** from the Live DNS page. A custom resolver is stored only in this browser and is never uploaded. It must:
+
+- use an HTTPS endpoint (plain HTTP is not permitted by the CSP),
+- accept the query parameters `name`, `type`, `do` and `cd`,
+- return the Cloudflare/Google-compatible JSON object (`Status`, `Answer`, `Authority`, `Additional`, `AA`/`TC`/`RD`/`RA`/`AD`/`CD`),
+- allow cross-origin requests (CORS) from the app’s origin.
+
+The optional **dig server** field only affects generated commands. A plain BIND server on UDP/TCP 53 still cannot be queried by the browser; expose a DoH JSON front end and add that HTTPS endpoint instead.
+
 Capabilities:
 
 - Query any common type, with `DO` (DNSSEC OK) and `CD` (checking disabled) controls.
-- Query one resolver or both and compare propagation.
+- Query one resolver, both built-ins or any two resolvers — including custom ones — and compare propagation.
 - Show RCODE, AA/TC/RD/RA/AD/CD flags, TTLs, authority/additional counts, comments and raw JSON.
 - Generate copy-ready `dig` commands for the exact query, including `+dnssec`, `+multi`, `+cd`, `+trace`, `+norecurse` and `-x`.
 - Verify imported zone records against live answers: expected vs observed, missing/unexpected values, NXDOMAIN/NODATA and AD status.
@@ -216,7 +225,7 @@ The app does **not** implement every DNSSEC signature algorithm or every closest
 
 ### Why not UDP/53?
 
-A web page has no raw UDP/TCP socket API. JavaScript cannot send a classic DNS packet to port 53, open an AXFR stream or authenticate TSIG. The app therefore uses DNS-over-HTTPS JSON, which is a real DNS lookup but a recursive resolver’s view. For UDP/TCP 53, authoritative queries, AXFR/IXFR, TSIG and `delv`, use the generated commands from a host with network access. A server-side query endpoint would remove this limitation but would turn the static container into a general DNS query proxy, so it is intentionally not included.
+A web page has no raw UDP/TCP socket API. JavaScript cannot send a classic DNS packet to port 53, open an AXFR stream or authenticate TSIG. The app therefore uses DNS-over-HTTPS JSON, which is a real DNS lookup but a recursive resolver’s view. For UDP/TCP 53, authoritative queries, AXFR/IXFR, TSIG and `delv`, use the generated commands from a host with network access. A server-side query endpoint would remove this limitation but would turn the static container into a general DNS query proxy, so it is intentionally not included. A custom resolver makes the client side flexible without adding that server-side attack surface.
 
 ### Export: multiple files, hashes and a validation plan
 
@@ -251,14 +260,14 @@ Browser tab
   File API ──► parser ──► analyzer ──► diff ──► localStorage
                                                    │
                                              up to 100 snapshots
-  Live DNS (opt-in) ──► Cloudflare/Google DoH (query name/type only)
+  Live DNS (opt-in) ──► built-in/custom DoH (query name/type only)
 Server / container
   static files + GET /version.json + optional auth session API
 ```
 
 - The container runs a Python stdlib static server. It has no config API, database, write path or configuration storage. The optional password gates add only `/api/auth-status`, `/api/login`, `/api/logout`, `/api/upload-status` and `/api/upload-auth`: session and import-password checks, never configuration data.
 - Imported configs are read by the browser and serialized into `localStorage` only when you import, edit or save.
-- The app fetches `/version.json` for build metadata. When a password is configured, `/api/auth-status`, `/api/login`, `/api/logout`, `/api/upload-status` and `/api/upload-auth` handle only the session/import-password checks. Live DNS fetches go to the two DoH origins after opt-in.
+- The app fetches `/version.json` for build metadata. When a password is configured, `/api/auth-status`, `/api/login`, `/api/logout`, `/api/upload-status` and `/api/upload-auth` handle only the session/import-password checks. Live DNS fetches go to the selected DoH endpoint after opt-in: Cloudflare, Google or a custom HTTPS URL stored in localStorage.
 - No external fonts, CDNs, analytics, crash reporting or advertising.
 - Strict CSP, `frame-ancestors 'none'`, `no-referrer`, `nosniff`, COOP/CORP and `no-store` caching.
 - The Docker image runs as a non-root user, read-only, with all capabilities dropped and `no-new-privileges` in the included Compose file.
@@ -272,7 +281,7 @@ The gate protects access to the app, and therefore to imports, analysis, history
 
 ### The live-DNS exception
 
-When you enable online lookups and run a query, the selected resolver sees the **DNS name and type** you asked for, plus your IP address as any internet service does. The app does not send configuration files, findings, history, file names or workspace metadata. Only the two DoH origins above are permitted by the CSP; there is no arbitrary resolver URL field.
+When you enable online lookups and run a query, the selected resolver sees the **DNS name and type** you asked for, plus your IP address as any internet service does. The app does not send configuration files, findings, history, file names or workspace metadata. The CSP permits `connect-src 'self' https:` so custom HTTPS DoH endpoints work without an image rebuild; the app itself constructs requests only for the resolver you select. Custom resolver URLs are validated as HTTPS (no embedded credentials) and stored in localStorage. A malicious custom resolver can forge or filter answers and sees the same query metadata, so add only endpoints you trust.
 
 ### What it does not protect against
 
@@ -373,7 +382,7 @@ Unknown directives and record types are preserved. New BIND features can be revi
 
 - **Not a compiler.** Run `named-checkconf -z` and `named-checkzone` with the exact BIND binary and the exact production file paths. The app generates the commands; it cannot run them in the browser.
 - **Not a deployment tool.** It does not SSH, reload, call `rndc` or push to a server.
-- **Live DNS uses DoH, not UDP/53.** A browser page has no raw UDP/TCP socket API, so JavaScript cannot send a classic DNS packet to port 53. The app uses DNS-over-HTTPS JSON from Cloudflare/Google and generates the equivalent `dig`/`delv` commands for real 53/853/AXFR/TSIG testing. Cached answers, GeoDNS, views, anycast and round-robin pools can legitimately differ; DoH is not authoritative truth.
+- **Live DNS uses DoH, not UDP/53.** A browser page has no raw UDP/TCP socket API, so JavaScript cannot send a classic DNS packet to port 53. The app uses DNS-over-HTTPS JSON from Cloudflare/Google or a custom HTTPS DoH JSON endpoint, and generates the equivalent `dig`/`delv` commands for real 53/853/AXFR/TSIG testing. Custom endpoints must support the JSON API and CORS; wire-only RFC 8484 endpoints, DoT and plain BIND on port 53 are not queried directly. Cached answers, GeoDNS, views, anycast and round-robin pools can legitimately differ; DoH is not authoritative truth.
 - **DNSSEC checking is deep but not a full validator.** The audit matches DS digests to DNSKEYs, verifies common RRSIG algorithms (RSA/SHA-256, RSA/SHA-512, ECDSA P-256/P-384, Ed25519 where supported), computes NSEC3 hashes and checks NSEC3/NSEC coverage. It does not implement every algorithm, every canonicalisation edge case or a complete closest-encloser/wildcard proof. Use `delv` and a local validating resolver for the final gate.
 - **Static analysis cannot see the host.** File ownership, permissions, SELinux/AppArmor labels, mounts, journals, signed files and systemd sandboxing are outside the browser.
 - **History is local.** Clearing browser data deletes it. Export if it matters.
@@ -408,7 +417,7 @@ The test suite covers:
 - analyzer rules for recursion, transfers, updates, CNAMEs, glue, DS↔DNSKEY mismatches, weak TSIG and RRSIG expiry
 - line and semantic diffs for zones and named.conf
 - key tags, DS digests, DNSKEY matching and RRSIG health
-- DoH URL construction, answer normalisation, resolver comparison and dig command generation
+- DoH URL construction, answer normalisation, custom resolver validation and sanitisation, resolver comparison and dig command generation
 - ZIP creation/reading, checksums and path sanitisation
 - exported manifest, validation script and workspace JSON
 
@@ -435,7 +444,7 @@ public/
       workspace.js             # multi-file model, includes, zones, views, keys
       analyzer.js              # explainable findings, scoring, checklist
       dnssec.js                # key tags, DS digests, offline matching, chain walk
-      doh.js                   # DoH client, propagation compare, dig commands
+      doh.js                   # DoH client, built-in/custom resolvers, compare, dig commands
       verify.js                # expected vs observed live checks
       diff.js                  # Myers line diff, semantic zone/named diff
       zip.js                   # minimal ZIP reader/writer
@@ -479,7 +488,7 @@ The local Python server and the container send:
 ```
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
   img-src 'self' data:; font-src 'self';
-  connect-src 'self' https://cloudflare-dns.com https://dns.google;
+  connect-src 'self' https:;
   object-src 'none'; worker-src 'none'; base-uri 'none';
   frame-ancestors 'none'; form-action 'none'
 Referrer-Policy: no-referrer

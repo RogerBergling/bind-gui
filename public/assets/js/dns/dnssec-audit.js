@@ -12,7 +12,7 @@ import {
 import { labelsOf, nameToWire, normalizeName, parentName } from './names.js';
 import { tokenizeFields } from './syntax.js';
 import { algorithmInfo, digestInfo, normalizeType, typeCode } from './types.js';
-import { queryDns } from './doh.js';
+import { DEFAULT_RESOLVER_ID, queryDns, resolverDigServer } from './doh.js';
 import {
   dnskeyTag,
   parseDnskeyRdata,
@@ -443,7 +443,7 @@ function signatureStatusToCheck(result, label) {
   return { status: 'fail', summary: `${label} RRSIG verification failed: ${result.error || result.status}.` };
 }
 
-export async function auditDnssec(name, resolver = 'cloudflare', options = {}) {
+export async function auditDnssec(name, resolver = DEFAULT_RESOLVER_ID, options = {}) {
   const chain = await walkDnssecChain(name, resolver, options);
   if (!chain.ok) return { ok: false, error: chain.error, name: normalizeName(name), resolver, checks: [] };
   const apex = chain.apex;
@@ -716,8 +716,8 @@ export async function auditDnssec(name, resolver = 'cloudflare', options = {}) {
   };
 }
 
-export function auditDigCommands(audit, resolver = 'cloudflare') {
-  const server = resolver === 'google' ? '8.8.8.8' : '1.1.1.1';
+export function auditDigCommands(audit, resolver = DEFAULT_RESOLVER_ID) {
+  const server = resolverDigServer(resolver);
   const apex = shellQuote(audit.apex);
   const denialName = shellQuote(audit.denial?.randomName || `random.${audit.apex}`);
   const commands = [

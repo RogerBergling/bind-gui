@@ -942,8 +942,8 @@ rndc zonestatus example.com</code></pre>
       {
         id: 'browser',
         title: 'Why a browser uses DoH',
-        html: `<p>Browsers cannot open UDP or TCP port 53, so the app uses DNS-over-HTTPS JSON endpoints from Cloudflare (1.1.1.1) and Google Public DNS (8.8.8.8). The query name and type are sent to the chosen resolver only after you explicitly enable online lookups. Configuration files stay in the browser.</p>
-<p>DoH answers are resolver answers, not authoritative truth. They may be cached, GeoDNS-specific or filtered by policy. Use them for propagation and validation checks, not as a replacement for querying the zone’s own name servers.</p>`,
+        html: `<p>Browsers cannot open UDP or TCP port 53, so the app uses DNS-over-HTTPS JSON endpoints. Cloudflare (1.1.1.1) and Google Public DNS (8.8.8.8) are built in, and you can add your own HTTPS DoH JSON endpoint. The query name and type are sent to the chosen resolver only after you explicitly enable online lookups. Configuration files stay in the browser; a custom resolver URL is stored only in localStorage.</p>
+<p>DoH answers are resolver answers, not authoritative truth. They may be cached, GeoDNS-specific or filtered by policy. A custom resolver must support the DoH JSON API and CORS, and it is only as trustworthy as the operator. Use DoH for propagation and validation checks, not as a replacement for querying the zone’s own name servers.</p>`,
       },
       {
         id: 'dig',
@@ -980,7 +980,7 @@ delv +vtrace example.com A</code></pre>
         id: 'app',
         title: 'What the Live DNS page adds',
         html: `<ul>
-<li>Queries both Cloudflare and Google and highlights propagation differences.</li>
+<li>Queries Cloudflare, Google or your own HTTPS DoH JSON resolver, and compares any two resolvers to highlight propagation differences.</li>
 <li>Recomputes the DS digest against published DNSKEYs.</li>
 <li>Walks the chain from the zone apex to the root.</li>
 <li>Runs a DNSViz-style DNSSEC audit: DNSKEY/SOA/NS signatures, RRSIG timing, signer and key-tag checks, NSEC3PARAM, local NSEC3 hash computation and NSEC3/NSEC denial coverage.</li>
@@ -988,7 +988,7 @@ delv +vtrace example.com A</code></pre>
 <li>Builds checks from your imported zone and compares expected with observed records, including NSEC3PARAM records.</li>
 <li>Generates copy-ready dig and delv commands.</li>
 </ul>
-<p>A browser page has no raw UDP/TCP socket API, so JavaScript cannot send a classic DNS packet to port 53. The app uses DNS-over-HTTPS JSON; use the generated <code>dig</code>/<code>delv</code> commands when you need UDP/TCP 53, AXFR, TSIG or authoritative-server testing. None of this proves that your server is correctly configured; it proves what public resolvers currently see. Combine it with authoritative queries, named-checkconf/zone and your own validating resolver.</p>`,
+<p>A browser page has no raw UDP/TCP socket API, so JavaScript cannot send a classic DNS packet to port 53. The app uses DNS-over-HTTPS JSON; use the generated <code>dig</code>/<code>delv</code> commands when you need UDP/TCP 53, AXFR, TSIG or authoritative-server testing. None of this proves that your server is correctly configured; it proves what the selected resolvers currently see. Combine it with authoritative queries, named-checkconf/zone and your own validating resolver.</p>`,
       },
     ],
   },

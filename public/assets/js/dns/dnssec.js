@@ -4,7 +4,7 @@ import { base64ToBytes, bytesToHex, concatBytes, shellQuote } from '../utils.js'
 import { labelsOf, nameToWire, normalizeName, parentName } from './names.js';
 import { parseDnssecTime } from './syntax.js';
 import { algorithmInfo, digestInfo } from './types.js';
-import { queryDns } from './doh.js';
+import { DEFAULT_RESOLVER_ID, queryDns, resolverDigServer } from './doh.js';
 
 export function parseDnskeyRdata(input) {
   if (!input) return null;
@@ -215,7 +215,7 @@ export function rrsigHealth(zone, now = Date.now()) {
   return findings;
 }
 
-export async function findZoneApex(name, resolver = 'cloudflare', options = {}) {
+export async function findZoneApex(name, resolver = DEFAULT_RESOLVER_ID, options = {}) {
   let candidate = normalizeName(name);
   const maxDepth = labelsOf(candidate).length + 2;
   for (let depth = 0; depth < maxDepth; depth += 1) {
@@ -234,7 +234,7 @@ export async function findZoneApex(name, resolver = 'cloudflare', options = {}) 
  * delegation. This uses the resolver's own validation result (AD) plus local
  * DS↔DNSKEY digest matching. It does not re-implement RRSIG signature maths.
  */
-export async function walkDnssecChain(name, resolver = 'cloudflare', options = {}) {
+export async function walkDnssecChain(name, resolver = DEFAULT_RESOLVER_ID, options = {}) {
   const lookup = await findZoneApex(name, resolver, options);
   if (!lookup.apex) {
     return { ok: false, error: lookup.error, name: normalizeName(name), chain: [], resolver };
@@ -298,8 +298,8 @@ export async function walkDnssecChain(name, resolver = 'cloudflare', options = {
   };
 }
 
-export function chainDigCommands(chain, resolver = 'cloudflare') {
-  const server = resolver === 'google' ? '8.8.8.8' : '1.1.1.1';
+export function chainDigCommands(chain, resolver = DEFAULT_RESOLVER_ID) {
+  const server = resolverDigServer(resolver);
   const commands = [];
   for (const item of chain || []) {
     commands.push({

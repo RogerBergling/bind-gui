@@ -1,20 +1,22 @@
 /* Live DNS: DoH lookup, propagation comparison, DNSSEC chain and zone verification. */
 
 import {
-  RESOLVER_LIST,
   buildDigCommands,
   compareDnsResults,
+  customResolverId,
   explainDohLimits,
+  normalizeCustomResolver,
   queryDns,
   resolverById,
+  resolverList,
 } from '../dns/doh.js';
 import { chainDigCommands, walkDnssecChain } from '../dns/dnssec.js';
 import { auditDigCommands, auditDnssec } from '../dns/dnssec-audit.js';
 import { buildVerificationChecks, runVerification, summarizeVerification, verificationCaveats } from '../dns/verify.js';
 import { parseWorkspace } from '../dns/workspace.js';
-import { getCurrentWorkspace, getSettings, saveSettings } from '../storage.js';
+import { getCurrentWorkspace, getSettings, saveCustomResolvers, saveSettings } from '../storage.js';
 import { articleById } from '../data/learn.js';
-import { codeBlock, icon, pill, toast, wireCopyButtons } from '../ui.js';
+import { codeBlock, confirmDialog, icon, openModal, pill, toast, wireCopyButtons } from '../ui.js';
 import { escapeHTML, formatDateTime, formatNumber } from '../utils.js';
 
 export async function renderLive(view, query) {
@@ -22,6 +24,7 @@ export async function renderLive(view, query) {
   const model = workspace ? parseWorkspace(workspace) : null;
   const settings = getSettings();
   let consent = Boolean(settings.onlineConsent);
+  let customResolvers = settings.customResolvers;
   let activeTab = ['lookup', 'dnssec', 'audit', 'verify', 'how'].includes(query.get('tab')) ? query.get('tab') : 'lookup';
   let lookupResults = null;
   let lookupComparison = null;
@@ -34,15 +37,36 @@ export async function renderLive(view, query) {
 
   const initialName = query.get('name') || (model?.zones?.[0]?.name ? model.zones[0].name.replace(/\.$/, '') : 'example.com');
   const initialZone = query.get('zone') || model?.zones?.[0]?.name || '';
+  const allResolvers = () => resolverList(customResolvers);
+  const resolverFor = (id) => resolverById(id, customResolvers);
+  const resolverOptions = (selectedId) => allResolvers().map((resolver) => {
+    const selected = resolver.id === selectedId ? ' selected' : '';
+    const label = `${resolver.name}${resolver.address ? ` · ${resolver.address}` : ''}${resolver.custom ? ' · custom' : ''}`;
+    return `<option value="${escapeHTML(resolver.id)}"${selected}>${escapeHTML(label)}</option>`;
+  }).join('');
+
+  function normalizeComparePair(value) {
+    const ids = Array.isArray(value) ? value : [];
+    const valid = ids.filter((id) => allResolvers().some((resolver) => resolver.id === id));
+    const first = valid[0] || 'cloudflare';
+    const second = valid.find((id) => id !== first) || (first === 'google' ? 'cloudflare' : 'google');
+    return [first, second];
+  }
+
+  const initialResolverChoice = settings.resolver === 'both' || allResolvers().some((resolver) => resolver.id === settings.resolver)
+    ? settings.resolver
+    : 'cloudflare';
+  const initialComparePair = normalizeComparePair(settings.compareResolvers);
+  const initialSingleResolver = initialResolverChoice === 'both' ? initialComparePair[0] : initialResolverChoice;
 
   view.innerHTML = `<div class="page-head">
-    <div class="page-head-copy"><span class="eyebrow">Live DNS · opt-in external checks</span><h1>What does the world see?</h1><p class="page-lede">Query Cloudflare (1.1.1.1) and Google (8.8.8.8) through DNS-over-HTTPS, compare propagation, recompute DS digests, walk the DNSSEC chain and verify your imported records against live answers.</p><div class="meta-strip">${pill('DoH JSON', 'accent', 'globe')}${pill('Cloudflare 1.1.1.1', 'neutral', 'wifi')}${pill('Google 8.8.8.8', 'neutral', 'wifi')}${pill('No config upload', 'ok', 'lock')}</div></div>
-    <div class="page-actions"><a class="btn" href="#/workbench">${icon('code', 16)} Workbench</a><a class="btn" href="#/security">${icon('shield', 16)} Privacy model</a></div>
+    <div class="page-head-copy"><span class="eyebrow">Live DNS · opt-in external checks</span><h1>What does the world see?</h1><p class="page-lede">Query Cloudflare (1.1.1.1), Google (8.8.8.8) or your own DNS-over-HTTPS JSON resolver, compare propagation, recompute DS digests, walk the DNSSEC chain and verify your imported records against live answers.</p><div class="meta-strip">${pill('DoH JSON', 'accent', 'globe')}${pill('Cloudflare 1.1.1.1', 'neutral', 'wifi')}${pill('Google 8.8.8.8', 'neutral', 'wifi')}${pill('Custom resolvers', 'neutral', 'server')}${pill('No config upload', 'ok', 'lock')}</div></div>
+    <div class="page-actions"><button class="btn" type="button" id="manage-resolvers">${icon('server', 16)} Custom resolvers</button><a class="btn" href="#/workbench">${icon('code', 16)} Workbench</a><a class="btn" href="#/security">${icon('shield', 16)} Privacy model</a></div>
   </div>
 
   <div class="consent-banner ${consent ? 'enabled' : ''}" id="online-gate">
     <div class="consent-icon">${icon('globe', 22)}</div>
-    <div class="consent-copy"><strong>${consent ? 'Online lookups are enabled' : 'Online lookups are off'}</strong><p>${consent ? 'Queries are sent only to the selected DoH resolver. Configuration files never leave this browser. You can disable this at any time.' : 'A browser cannot use dig or UDP/53. This page uses DNS-over-HTTPS JSON endpoints from Cloudflare or Google. Enabling sends the queried name and type to that resolver; it does not send your configuration files.'}</p></div>
+    <div class="consent-copy"><strong>${consent ? 'Online lookups are enabled' : 'Online lookups are off'}</strong><p>${consent ? 'Queries are sent only to the selected DoH resolver. Configuration files never leave this browser. You can disable this at any time.' : 'A browser cannot use dig or UDP/53. This page uses DNS-over-HTTPS JSON endpoints from Cloudflare, Google or a custom HTTPS resolver you add. Enabling sends the queried name and type to that resolver; it does not send your configuration files.'}</p></div>
     <div class="consent-actions">${consent ? `<button class="btn btn-sm btn-ghost" type="button" id="disable-online">Turn off</button>` : `<button class="btn btn-primary" type="button" id="enable-online">${icon('check', 15)} Enable online lookups</button>`}</div>
   </div>
 
@@ -59,7 +83,9 @@ export async function renderLive(view, query) {
       <div class="query-grid">
         <label class="field span-2"><span>DNS name</span><input id="lookup-name" type="text" value="${escapeHTML(initialName)}" placeholder="www.example.com" autocomplete="off" spellcheck="false"><small>Absolute or relative; the app adds the root dot. IP addresses work with PTR.</small></label>
         <label class="field"><span>Type</span><select id="lookup-type" class="select">${['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'SRV', 'CAA', 'PTR', 'DS', 'DNSKEY', 'RRSIG', 'NSEC', 'NSEC3', 'NSEC3PARAM', 'TLSA', 'SSHFP', 'SVCB', 'HTTPS', 'NAPTR', 'DNAME', 'URI', 'SPF', 'ANY'].map((type) => `<option value="${type}">${type}</option>`).join('')}</select></label>
-        <label class="field"><span>Resolver</span><select id="lookup-resolver" class="select"><option value="both">Both (compare)</option>${RESOLVER_LIST.map((resolver) => `<option value="${resolver.id}">${escapeHTML(resolver.name)} · ${resolver.address}</option>`).join('')}</select></label>
+        <label class="field"><span>Resolver</span><select id="lookup-resolver" class="select"><option value="both">Compare two resolvers…</option>${resolverOptions(initialResolverChoice)}</select><small>Built-in public resolvers and your own HTTPS DoH JSON endpoints.</small></label>
+        <label class="field" id="lookup-compare-a-field"><span>Compare A</span><select id="lookup-compare-a" class="select">${resolverOptions(initialComparePair[0])}</select></label>
+        <label class="field" id="lookup-compare-b-field"><span>Compare B</span><select id="lookup-compare-b" class="select">${resolverOptions(initialComparePair[1])}</select></label>
         <label class="field"><span>Preset from workspace</span><select id="lookup-preset" class="select"><option value="">Choose a record…</option>${recordPresets(model).map((option) => `<option value="${escapeHTML(option.value)}">${escapeHTML(option.label)}</option>`).join('')}</select></label>
         <label class="checkbox-field"><input type="checkbox" id="lookup-dnssec" checked><span>Request DNSSEC records (+dnssec)</span><small>Sets DO=1. The AD flag still depends on the resolver validating the chain.</small></label>
         <label class="checkbox-field"><input type="checkbox" id="lookup-cd"><span>Disable validation (+cd)</span><small>Diagnostic only. A +cd answer is not authenticated.</small></label>
@@ -70,7 +96,7 @@ export async function renderLive(view, query) {
       ${lookupResults ? renderLookupOutput(lookupResults, lookupComparison) : `<div class="empty-panel"><h2>No query yet</h2><p>Ask for a name and type. Results show flags, TTLs, DNSSEC status and the exact dig commands to reproduce the query.</p></div>`}
     </div>
     <div class="section-head small"><h2>Reproduce it with dig</h2><p>Copy these commands into a terminal on a host that can reach port 53.</p></div>
-    <div id="lookup-dig">${codeBlock(buildDigCommands({ name: initialName, type: 'A', resolver: 'cloudflare', dnssec: true }).map((item) => `# ${item.label}\n${item.command}`).join('\n\n'), { label: 'dig commands', copy: true })}</div>
+    <div id="lookup-dig">${codeBlock(buildDigCommands({ name: initialName, type: 'A', resolver: resolverFor(initialSingleResolver), dnssec: true }).map((item) => `# ${item.label}\n${item.command}`).join('\n\n'), { label: 'dig commands', copy: true })}</div>
     <div class="callout info">${icon('info', 18)}<div><strong>DoH is not a compiler</strong><p>${explainDohLimits().map((item) => escapeHTML(item)).join(' ')}</p></div></div>
   </section>
 
@@ -78,7 +104,7 @@ export async function renderLive(view, query) {
     <div class="query-card">
       <div class="query-grid">
         <label class="field span-2"><span>Name or zone</span><input id="chain-name" type="text" value="${escapeHTML(initialName)}" placeholder="example.com" autocomplete="off" spellcheck="false"><small>The walker finds the zone apex with SOA, then checks DS and DNSKEY at every delegation up to the root.</small></label>
-        <label class="field"><span>Resolver</span><select id="chain-resolver" class="select">${RESOLVER_LIST.map((resolver) => `<option value="${resolver.id}">${escapeHTML(resolver.name)} · ${resolver.address}</option>`).join('')}</select></label>
+        <label class="field"><span>Resolver</span><select id="chain-resolver" class="select">${resolverOptions(initialSingleResolver)}</select></label>
         <label class="field"><span>What is checked</span><div class="readonly-note">DS presence, DNSKEY presence, key tag, DS digest (SHA-1/256/384), AD flag, RRSIG count.</div></label>
       </div>
       <div class="query-actions"><button class="btn btn-primary" type="button" id="run-chain" ${consent ? '' : 'disabled'}>${icon('shield', 15)} Walk the chain</button><span class="muted-note" id="chain-status">${consent ? 'Ready.' : 'Enable online lookups first.'}</span></div>
@@ -91,7 +117,7 @@ export async function renderLive(view, query) {
     <div class="query-card">
       <div class="query-grid">
         <label class="field span-2"><span>Name or zone</span><input id="audit-name" type="text" value="${escapeHTML(initialName)}" placeholder="example.com" autocomplete="off" spellcheck="false"><small>A DNSViz-style audit using DoH: chain, DS↔DNSKEY, DNSKEY/SOA/NS signatures, NSEC3PARAM, NSEC3/NSEC denial proof, algorithms and RRSIG timing.</small></label>
-        <label class="field"><span>Resolver</span><select id="audit-resolver" class="select">${RESOLVER_LIST.map((resolver) => `<option value="${resolver.id}">${escapeHTML(resolver.name)} · ${resolver.address}</option>`).join('')}</select></label>
+        <label class="field"><span>Resolver</span><select id="audit-resolver" class="select">${resolverOptions(initialSingleResolver)}</select></label>
         <label class="field"><span>What is tested</span><div class="readonly-note">DS, DNSKEY, RRSIG (cryptographic verify where WebCrypto supports it), NSEC3PARAM, NSEC3 hash + coverage, NSEC coverage, AD, RRSIG expiry/key tag/signer.</div></label>
       </div>
       <div class="query-actions"><button class="btn btn-primary" type="button" id="run-audit" ${consent ? '' : 'disabled'}>${icon('activity', 15)} Run DNSSEC audit</button><span class="muted-note" id="audit-status">${consent ? 'Ready.' : 'Enable online lookups first.'}</span></div>
@@ -104,7 +130,7 @@ export async function renderLive(view, query) {
     <div class="query-card">
       <div class="query-grid">
         <label class="field"><span>Zone</span><select id="verify-zone" class="select"><option value="all">All imported zones</option>${model.zones.map((zone) => `<option value="${escapeHTML(zone.name)}" ${initialZone === zone.name ? 'selected' : ''}>${escapeHTML(zone.name)}</option>`).join('')}</select></label>
-        <label class="field"><span>Resolver</span><select id="verify-resolver" class="select">${RESOLVER_LIST.map((resolver) => `<option value="${resolver.id}">${escapeHTML(resolver.name)} · ${resolver.address}</option>`).join('')}</select></label>
+        <label class="field"><span>Resolver</span><select id="verify-resolver" class="select">${resolverOptions(initialSingleResolver)}</select></label>
         <label class="field"><span>Maximum checks</span><input id="verify-limit" type="number" min="1" max="80" value="30"><small>Checks are grouped by owner + type. DNSSEC records are included where present.</small></label>
         <label class="field"><span>What is compared</span><div class="readonly-note">A, AAAA, CNAME, MX, TXT, NS, CAA, SRV, DS, DNSKEY. TTL is shown but not compared.</div></label>
       </div>
@@ -121,12 +147,16 @@ export async function renderLive(view, query) {
   `;
 
   // Restore select values that were previously chosen.
-  view.querySelector('#lookup-resolver').value = settings.resolver === 'google' ? 'google' : (settings.resolver === 'both' ? 'both' : 'cloudflare');
-  view.querySelector('#verify-resolver')?.setAttribute('value', settings.resolver === 'google' ? 'google' : 'cloudflare');
-  if (view.querySelector('#verify-resolver')) view.querySelector('#verify-resolver').value = settings.resolver === 'google' ? 'google' : 'cloudflare';
-  if (chainResult) view.querySelector('#chain-resolver').value = settings.resolver === 'google' ? 'google' : 'cloudflare';
-  if (view.querySelector('#audit-resolver')) view.querySelector('#audit-resolver').value = settings.resolver === 'google' ? 'google' : 'cloudflare';
+  view.querySelector('#lookup-resolver').value = initialResolverChoice;
+  view.querySelector('#lookup-compare-a').value = initialComparePair[0];
+  view.querySelector('#lookup-compare-b').value = initialComparePair[1];
+  view.querySelector('#verify-resolver').value = initialSingleResolver;
+  view.querySelector('#chain-resolver').value = initialSingleResolver;
+  view.querySelector('#audit-resolver').value = initialSingleResolver;
+  updateLookupResolverFields();
   wireCopyButtons(view);
+  view.querySelector('#manage-resolvers').addEventListener('click', openResolverManager);
+  view.querySelector('#lookup-resolver').addEventListener('change', updateLookupResolverFields);
 
   view.querySelectorAll('[data-live-tab]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -160,7 +190,7 @@ export async function renderLive(view, query) {
     gate.querySelector('.consent-copy strong').textContent = consent ? 'Online lookups are enabled' : 'Online lookups are off';
     gate.querySelector('.consent-copy p').textContent = consent
       ? 'Queries are sent only to the selected DoH resolver. Configuration files never leave this browser. You can disable this at any time.'
-      : 'A browser cannot use dig or UDP/53. This page uses DNS-over-HTTPS JSON endpoints from Cloudflare or Google. Enabling sends the queried name and type to that resolver; it does not send your configuration files.';
+      : 'A browser cannot use dig or UDP/53. This page uses DNS-over-HTTPS JSON endpoints from Cloudflare, Google or a custom HTTPS resolver you add. Enabling sends the queried name and type to that resolver; it does not send your configuration files.';
     gate.querySelector('.consent-actions').innerHTML = consent
       ? '<button class="btn btn-sm btn-ghost" type="button" id="disable-online">Turn off</button>'
       : `<button class="btn btn-primary" type="button" id="enable-online">${icon('check', 15)} Enable online lookups</button>`;
@@ -212,20 +242,32 @@ export async function renderLive(view, query) {
       toast('Enter a DNS name.', 'danger');
       return;
     }
-    saveSettings({ resolver: resolverChoice });
+    let ids;
+    if (resolverChoice === 'both') {
+      const first = view.querySelector('#lookup-compare-a').value;
+      const second = view.querySelector('#lookup-compare-b').value;
+      if (first === second) {
+        toast('Choose two different resolvers to compare.', 'warn');
+        return;
+      }
+      ids = [first, second];
+      saveSettings({ resolver: 'both', compareResolvers: ids });
+    } else {
+      ids = [resolverChoice];
+      saveSettings({ resolver: resolverChoice });
+    }
+    const selectedResolvers = ids.map(resolverFor);
     busy = true;
     clearAbort();
     abortController = new AbortController();
     setBusy('#run-lookup', true, 'Querying…');
-    setStatus('#lookup-status', `Querying ${resolverChoice === 'both' ? 'both resolvers' : resolverById(resolverChoice).name}…`);
+    setStatus('#lookup-status', `Querying ${selectedResolvers.map((resolver) => resolver.name).join(' vs ')}…`);
     try {
-      const ids = resolverChoice === 'both' ? ['cloudflare', 'google'] : [resolverChoice];
-      const results = await Promise.all(ids.map((id) => queryDns({ resolver: id, name, type, dnssec, checkingDisabled, signal: abortController.signal })));
-      const byId = Object.fromEntries(ids.map((id, index) => [id, results[index]]));
-      lookupResults = byId;
-      lookupComparison = ids.length === 2 ? compareDnsResults(byId.cloudflare, byId.google) : null;
-      view.querySelector('#lookup-output').innerHTML = renderLookupOutput(byId, lookupComparison);
-      view.querySelector('#lookup-dig').innerHTML = codeBlock(buildDigCommands({ name, type, resolver: ids[0], dnssec }).map((item) => `# ${item.label}\n${item.command}`).join('\n\n'), { label: 'dig commands', copy: true });
+      const results = await Promise.all(selectedResolvers.map((resolver) => queryDns({ resolver, name, type, dnssec, checkingDisabled, signal: abortController.signal })));
+      lookupResults = results;
+      lookupComparison = results.length === 2 ? compareDnsResults(results[0], results[1]) : null;
+      view.querySelector('#lookup-output').innerHTML = renderLookupOutput(results, lookupComparison);
+      view.querySelector('#lookup-dig').innerHTML = codeBlock(buildDigCommands({ name, type, resolver: selectedResolvers[0], dnssec }).map((item) => `# ${item.label}\n${item.command}`).join('\n\n'), { label: 'dig commands', copy: true });
       wireCopyButtons(view);
       setStatus('#lookup-status', `Done in ${results.map((result) => `${result.resolver.name} ${result.elapsedMs ?? '—'} ms`).join(' · ')}.`);
     } catch (error) {
@@ -240,9 +282,10 @@ export async function renderLive(view, query) {
   view.querySelector('#run-chain')?.addEventListener('click', async () => {
     if (!requireConsent() || busy) return;
     const name = view.querySelector('#chain-name').value.trim();
-    const resolver = view.querySelector('#chain-resolver').value;
+    const resolverId = view.querySelector('#chain-resolver').value;
+    const resolver = resolverFor(resolverId);
     if (!name) return;
-    saveSettings({ resolver });
+    saveSettings({ resolver: resolverId });
     busy = true;
     clearAbort();
     abortController = new AbortController();
@@ -265,9 +308,10 @@ export async function renderLive(view, query) {
   view.querySelector('#run-audit')?.addEventListener('click', async () => {
     if (!requireConsent() || busy) return;
     const name = view.querySelector('#audit-name').value.trim();
-    const resolver = view.querySelector('#audit-resolver').value;
+    const resolverId = view.querySelector('#audit-resolver').value;
+    const resolver = resolverFor(resolverId);
     if (!name) return;
-    saveSettings({ resolver });
+    saveSettings({ resolver: resolverId });
     busy = true;
     clearAbort();
     abortController = new AbortController();
@@ -291,7 +335,8 @@ export async function renderLive(view, query) {
   view.querySelector('#run-verify')?.addEventListener('click', async () => {
     if (!requireConsent() || busy) return;
     const zoneName = view.querySelector('#verify-zone').value;
-    const resolver = view.querySelector('#verify-resolver').value;
+    const resolverId = view.querySelector('#verify-resolver').value;
+    const resolver = resolverFor(resolverId);
     const limit = Math.max(1, Math.min(80, Number(view.querySelector('#verify-limit').value) || 30));
     const zones = zoneName === 'all' ? model.zones : model.zones.filter((zone) => zone.name === zoneName);
     const checks = buildVerificationChecks(zones, { limit });
@@ -299,7 +344,7 @@ export async function renderLive(view, query) {
       toast('No verifiable records were found in the selected zone(s).', 'warn');
       return;
     }
-    saveSettings({ resolver });
+    saveSettings({ resolver: resolverId });
     busy = true;
     clearAbort();
     abortController = new AbortController();
@@ -308,7 +353,7 @@ export async function renderLive(view, query) {
     progress.hidden = false;
     progress.querySelector('.progress-bar').style.width = '0%';
     progress.querySelector('span').textContent = `0 / ${checks.length}`;
-    setStatus('#verify-status', `Checking ${checks.length} record group(s) with ${resolverById(resolver).name}…`);
+    setStatus('#verify-status', `Checking ${checks.length} record group(s) with ${resolver.name}…`);
     try {
       verificationResults = await runVerification(checks, {
         resolver,
@@ -330,6 +375,180 @@ export async function renderLive(view, query) {
       setBusy('#run-verify', false, `${icon('play', 15)} Verify live records`);
     }
   });
+
+  function updateLookupResolverFields() {
+    const compare = view.querySelector('#lookup-resolver').value === 'both';
+    view.querySelector('#lookup-compare-a-field').hidden = !compare;
+    view.querySelector('#lookup-compare-b-field').hidden = !compare;
+  }
+
+  function refreshResolverSelects() {
+    const list = allResolvers();
+    const valid = new Set(list.map((resolver) => resolver.id));
+    const lookup = view.querySelector('#lookup-resolver');
+    if (lookup) {
+      const preferred = lookup.value;
+      lookup.innerHTML = `<option value="both">Compare two resolvers…</option>${resolverOptions()}`;
+      lookup.value = preferred === 'both' || valid.has(preferred) ? preferred : 'cloudflare';
+    }
+    ['#lookup-compare-a', '#lookup-compare-b', '#chain-resolver', '#audit-resolver', '#verify-resolver'].forEach((selector) => {
+      const select = view.querySelector(selector);
+      if (!select) return;
+      const preferred = select.value;
+      select.innerHTML = resolverOptions();
+      select.value = valid.has(preferred) ? preferred : 'cloudflare';
+    });
+    const first = view.querySelector('#lookup-compare-a');
+    const second = view.querySelector('#lookup-compare-b');
+    if (first?.value === second?.value) {
+      const alternative = list.find((resolver) => resolver.id !== first.value);
+      if (alternative) second.value = alternative.id;
+    }
+    updateLookupResolverFields();
+  }
+
+  function openResolverManager() {
+    let editingId = '';
+
+    function resolverManagerBody() {
+      const editing = customResolvers.find((resolver) => resolver.id === editingId) || null;
+      return `<div class="resolver-manager">
+        <div class="callout info">${icon('info', 18)}<div><strong>DoH JSON requirements</strong><p>The endpoint must use HTTPS, accept the query parameters <code>name</code>, <code>type</code>, <code>do</code> and <code>cd</code>, return a Cloudflare/Google-compatible JSON object and allow cross-origin requests from this app. A plain BIND server on UDP/TCP 53 cannot be queried directly by a browser.</p></div></div>
+        <div class="section-head small"><h2>Saved resolvers</h2><p>${customResolvers.length ? `${customResolvers.length} custom resolver(s) in this browser.` : 'No custom resolvers yet.'}</p></div>
+        ${customResolvers.length ? `<ul class="resolver-manager-list">${customResolvers.map((resolver) => `<li class="resolver-manager-item">
+          <div><strong>${escapeHTML(resolver.name)}</strong><span>${escapeHTML(resolver.endpoint)}</span><small>dig @${escapeHTML(resolver.digServer)} · ${escapeHTML(resolver.address)}</small><div class="resolver-test-status" data-resolver-status="${escapeHTML(resolver.id)}"></div></div>
+          <div class="resolver-manager-actions">
+            <button class="btn btn-sm" type="button" data-test-resolver="${escapeHTML(resolver.id)}">Test</button>
+            <button class="btn btn-sm btn-ghost" type="button" data-edit-resolver="${escapeHTML(resolver.id)}">Edit</button>
+            <button class="btn btn-sm btn-danger" type="button" data-delete-resolver="${escapeHTML(resolver.id)}">Delete</button>
+          </div>
+        </li>`).join('')}</ul>` : ''}
+        <form id="custom-resolver-form" class="query-grid resolver-form">
+          <label class="field span-2"><span>Name</span><input name="name" type="text" maxlength="80" required value="${escapeHTML(editing?.name || '')}" placeholder="Home AdGuard"></label>
+          <label class="field span-2"><span>DoH JSON endpoint (HTTPS)</span><input name="endpoint" type="url" required value="${escapeHTML(editing?.endpoint || '')}" placeholder="https://dns.example/dns-query"></label>
+          <label class="field"><span>Label / address (optional)</span><input name="address" type="text" maxlength="120" value="${escapeHTML(editing?.address || '')}" placeholder="192.0.2.10"></label>
+          <label class="field"><span>dig server (optional)</span><input name="digServer" type="text" maxlength="253" value="${escapeHTML(editing?.digServer || '')}" placeholder="dns.example"><small>Only used in generated commands; must be a plain hostname or IP.</small></label>
+          <div class="field span-2 resolver-form-actions"><span>${editing ? 'Editing an existing resolver.' : 'The endpoint is contacted only when you run a lookup with this resolver selected.'}</span><div><button class="btn btn-primary" type="submit">${editing ? 'Save changes' : 'Add resolver'}</button>${editing ? '<button class="btn btn-ghost" type="button" data-cancel-edit>Cancel</button>' : ''}</div></div>
+        </form>
+      </div>`;
+    }
+
+    function refreshResolverManager(modal) {
+      modal.querySelector('.modal-body').innerHTML = resolverManagerBody();
+      wireResolverManager(modal);
+    }
+
+    function wireResolverManager(modal) {
+      modal.querySelector('#custom-resolver-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const data = new FormData(event.target);
+        const name = String(data.get('name') || '').trim();
+        let resolver;
+        try {
+          resolver = normalizeCustomResolver({
+            id: editingId || customResolverId(name),
+            name,
+            endpoint: data.get('endpoint'),
+            address: data.get('address'),
+            digServer: data.get('digServer'),
+          });
+        } catch (error) {
+          toast(error?.message || 'The resolver settings are invalid.', 'danger');
+          return;
+        }
+        const next = editingId
+          ? customResolvers.map((item) => (item.id === editingId ? resolver : item))
+          : [...customResolvers, resolver];
+        const saved = saveCustomResolvers(next);
+        if (!saved.ok) {
+          toast(saved.error || 'Could not save the resolver.', 'danger');
+          return;
+        }
+        customResolvers = saved.settings.customResolvers;
+        editingId = '';
+        refreshResolverSelects();
+        refreshResolverManager(modal);
+        toast(`${resolver.name} saved locally.`, 'ok');
+      });
+
+      modal.querySelectorAll('[data-edit-resolver]').forEach((button) => {
+        button.addEventListener('click', () => {
+          editingId = button.dataset.editResolver;
+          refreshResolverManager(modal);
+          modal.querySelector('#custom-resolver-form [name="name"]')?.focus();
+        });
+      });
+
+      modal.querySelector('[data-cancel-edit]')?.addEventListener('click', () => {
+        editingId = '';
+        refreshResolverManager(modal);
+      });
+
+      modal.querySelectorAll('[data-delete-resolver]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const resolver = customResolvers.find((item) => item.id === button.dataset.deleteResolver);
+          if (!resolver) return;
+          const ok = await confirmDialog({
+            title: 'Delete custom resolver?',
+            message: `Remove <strong>${escapeHTML(resolver.name)}</strong> from this browser? This does not change the endpoint itself.`,
+            confirmLabel: 'Delete',
+          });
+          if (!ok) return;
+          const saved = saveCustomResolvers(customResolvers.filter((item) => item.id !== resolver.id));
+          if (!saved.ok) {
+            toast(saved.error || 'Could not delete the resolver.', 'danger');
+            return;
+          }
+          customResolvers = saved.settings.customResolvers;
+          if (editingId === resolver.id) editingId = '';
+          refreshResolverSelects();
+          refreshResolverManager(modal);
+          toast(`${resolver.name} removed from this browser.`, 'ok');
+        });
+      });
+
+      modal.querySelectorAll('[data-test-resolver]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          if (!consent) {
+            toast('Enable online lookups before testing a resolver.', 'warn');
+            return;
+          }
+          const resolver = resolverFor(button.dataset.testResolver);
+          if (!resolver || !resolver.custom) return;
+          const status = modal.querySelector(`[data-resolver-status="${resolver.id}"]`);
+          button.disabled = true;
+          if (status) {
+            status.textContent = 'Querying example.com A…';
+            status.dataset.tone = '';
+          }
+          try {
+            const result = await queryDns({ resolver, name: 'example.com', type: 'A' });
+            if (status) {
+              status.textContent = result.ok
+                ? `${result.rcode} · ${result.answers.length} answer(s) · ${result.elapsedMs} ms`
+                : (result.error || 'The test query failed.');
+              status.dataset.tone = result.ok ? 'ok' : 'danger';
+            }
+          } catch (error) {
+            if (status) {
+              status.textContent = error?.message || 'The test query failed.';
+              status.dataset.tone = 'danger';
+            }
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    }
+
+    openModal({
+      title: 'Custom DoH resolvers',
+      lede: 'Add HTTPS DNS-over-HTTPS JSON endpoints you trust. Custom resolvers are stored only in this browser and are never uploaded.',
+      body: resolverManagerBody(),
+      wide: true,
+      onMount: (modal) => wireResolverManager(modal),
+    });
+  }
 
   function clearAbort() {
     if (abortController) abortController.abort();
@@ -371,33 +590,41 @@ function recordPresets(model) {
   return presets;
 }
 
-function renderLookupOutput(byId, comparison) {
-  const cards = Object.values(byId || {}).map((result) => renderResolverResult(result)).join('');
+function renderLookupOutput(results, comparison) {
+  const list = Array.isArray(results) ? results : [];
+  const cards = list.map((result) => renderResolverResult(result)).join('');
+  const leftName = list[0]?.resolver?.name || 'Resolver A';
+  const rightName = list[1]?.resolver?.name || 'Resolver B';
   const comparisonHtml = comparison ? `<div class="comparison-card ${comparison.consistent ? 'ok' : 'warn'}">
     <div class="comparison-head">${icon(comparison.consistent ? 'check' : 'warning', 18)}<strong>${comparison.consistent ? 'Resolvers agree' : 'Resolvers disagree — inspect propagation'}</strong>${pill(`${comparison.onlyA.length + comparison.onlyB.length} differing`, comparison.consistent ? 'ok' : 'warn', 'diff')}</div>
     <div class="comparison-grid">
-      <div><h4>Only Cloudflare</h4>${comparison.onlyA.length ? `<ul>${comparison.onlyA.map((value) => `<li><code>${escapeHTML(value)}</code></li>`).join('')}</ul>` : '<p class="muted">None.</p>'}</div>
-      <div><h4>Only Google</h4>${comparison.onlyB.length ? `<ul>${comparison.onlyB.map((value) => `<li><code>${escapeHTML(value)}</code></li>`).join('')}</ul>` : '<p class="muted">None.</p>'}</div>
+      <div><h4>Only ${escapeHTML(leftName)}</h4>${comparison.onlyA.length ? `<ul>${comparison.onlyA.map((value) => `<li><code>${escapeHTML(value)}</code></li>`).join('')}</ul>` : '<p class="muted">None.</p>'}</div>
+      <div><h4>Only ${escapeHTML(rightName)}</h4>${comparison.onlyB.length ? `<ul>${comparison.onlyB.map((value) => `<li><code>${escapeHTML(value)}</code></li>`).join('')}</ul>` : '<p class="muted">None.</p>'}</div>
     </div>
     <p class="muted-note">Differences can be legitimate: GeoDNS, round-robin pools, split horizon, caches and resolver policy all change answers. A difference is a question, not automatically an error.</p>
   </div>` : '';
   return `<div class="resolver-grid">${cards}</div>${comparisonHtml}`;
 }
 
+function resolverDisplayName(resolver) {
+  return resolver && typeof resolver === 'object' ? (resolver.name || 'Resolver') : resolverById(resolver).name;
+}
+
 function renderResolverResult(result) {
   if (!result) return '';
+  const customBadge = result.resolver?.custom ? pill('custom', 'neutral', 'server') : '';
   if (!result.ok) {
     return `<article class="resolver-card danger">
-      <div class="resolver-head"><div>${icon('error', 18)}<strong>${escapeHTML(result.resolver?.name || 'Resolver')}</strong><span>${escapeHTML(result.resolver?.address || '')}</span></div>${pill('failed', 'danger', 'error')}</div>
+      <div class="resolver-head"><div>${icon('error', 18)}<strong>${escapeHTML(result.resolver?.name || 'Resolver')}</strong><span>${escapeHTML(result.resolver?.address || '')}</span></div><div class="resolver-flags">${customBadge}${pill('failed', 'danger', 'error')}</div></div>
       <p>${escapeHTML(result.error || 'The query failed.')}</p>
-      <p class="muted-note">Check network access, CSP, resolver availability or whether the query type is accepted by the JSON API.</p>
+      <p class="muted-note">Check network access, CORS, CSP, resolver availability or whether the query type is accepted by the JSON API.</p>
     </article>`;
   }
   const answers = result.answers || [];
   return `<article class="resolver-card">
     <div class="resolver-head">
       <div>${icon('globe', 18)}<strong>${escapeHTML(result.resolver.name)}</strong><span>${escapeHTML(result.resolver.address)} · ${escapeHTML(result.type)} ${escapeHTML(result.name)}</span></div>
-      <div class="resolver-flags">${pill(result.rcode, result.status === 0 ? 'ok' : result.rcode === 'NXDOMAIN' ? 'warn' : 'danger', result.status === 0 ? 'check' : 'warning')}${pill(result.flags.ad ? 'AD validated' : 'AD not set', result.flags.ad ? 'ok' : 'neutral', 'shield')}${pill(`${result.elapsedMs ?? '—'} ms`, 'neutral', 'clock')}</div>
+      <div class="resolver-flags">${customBadge}${pill(result.rcode, result.status === 0 ? 'ok' : result.rcode === 'NXDOMAIN' ? 'warn' : 'danger', result.status === 0 ? 'check' : 'warning')}${pill(result.flags.ad ? 'AD validated' : 'AD not set', result.flags.ad ? 'ok' : 'neutral', 'shield')}${pill(`${result.elapsedMs ?? '—'} ms`, 'neutral', 'clock')}</div>
     </div>
     <div class="flag-strip">${['AA', 'TC', 'RD', 'RA', 'AD', 'CD'].map((flag) => `<span class="flag ${result.flags[flag.toLowerCase()] ? 'on' : ''}">${flag} ${result.flags[flag.toLowerCase()] ? '1' : '0'}</span>`).join('')}</div>
     ${answers.length ? `<div class="table-scroll"><table class="record-table answer-table"><thead><tr><th>Type</th><th>TTL</th><th>Data</th></tr></thead><tbody>${answers.map((answer) => `<tr><td><span class="record-type">${escapeHTML(answer.type)}</span></td><td class="mono">${formatNumber(answer.ttl)}</td><td class="record-data"><code>${escapeHTML(answer.data)}</code></td></tr>`).join('')}</tbody></table></div>` : `<p class="muted">No answers in the ANSWER section. That can be NODATA rather than NXDOMAIN; read the RCODE and authority section.</p>`}
@@ -415,7 +642,7 @@ function renderChain(result) {
     unvalidated: 'Keys match, but the resolver did not set AD',
     unknown: 'Unknown',
   }[result.overall] || result.overall;
-  return `<div class="chain-overall ${statusTone}">${icon(result.overall === 'secure' ? 'shield' : 'warning', 22)}<div><strong>${escapeHTML(label)}</strong><p>Apex <code>${escapeHTML(result.apex || result.name)}</code> · resolver ${escapeHTML(resolverById(result.resolver).name)} · checked ${escapeHTML(formatDateTime(result.checkedAt))}</p></div>${pill(result.overall, statusTone, result.overall === 'secure' ? 'check' : 'warning')}</div>
+  return `<div class="chain-overall ${statusTone}">${icon(result.overall === 'secure' ? 'shield' : 'warning', 22)}<div><strong>${escapeHTML(label)}</strong><p>Apex <code>${escapeHTML(result.apex || result.name)}</code> · resolver ${escapeHTML(resolverDisplayName(result.resolver))} · checked ${escapeHTML(formatDateTime(result.checkedAt))}</p></div>${pill(result.overall, statusTone, result.overall === 'secure' ? 'check' : 'warning')}</div>
   <div class="chain-steps">${result.chain.map((step, index) => `<article class="chain-step ${step.status}">
     <div class="chain-step-head"><div class="chain-index">${index + 1}</div><div><h3>${escapeHTML(step.zone)}</h3><p>${step.isRoot ? 'Root trust anchor' : 'Delegation'} · ${escapeHTML(step.status)}</p></div><div class="resolver-flags">${pill(step.ad ? 'AD set' : 'AD not set', step.ad ? 'ok' : 'neutral', 'shield')}${pill(`${step.rrsigs.length} RRSIG`, step.rrsigs.length ? 'ok' : 'neutral', 'file')}</div></div>
     <div class="chain-step-body">
@@ -480,7 +707,7 @@ function renderAudit(audit) {
   const signatureFail = audit.signatures.filter((item) => ['fail', 'no-key', 'missing'].includes(item.status)).length;
   return `<div class="audit-overall ${tone}">
     ${icon(audit.overall === 'secure' ? 'shield' : audit.overall === 'bogus' ? 'error' : 'warning', 24)}
-    <div><span class="eyebrow">DNSSEC audit · ${escapeHTML(audit.apex)}</span><h2>${escapeHTML(label)}</h2><p>${escapeHTML(resolverById(audit.resolver).name)} · ${escapeHTML(formatDateTime(audit.checkedAt))} · denial mode ${escapeHTML(mode)} · ${escapeHTML(String(audit.keys.length))} DNSKEY · ${escapeHTML(String(audit.dsRecords.length))} DS</p></div>
+    <div><span class="eyebrow">DNSSEC audit · ${escapeHTML(audit.apex)}</span><h2>${escapeHTML(label)}</h2><p>${escapeHTML(resolverDisplayName(audit.resolver))} · ${escapeHTML(formatDateTime(audit.checkedAt))} · denial mode ${escapeHTML(mode)} · ${escapeHTML(String(audit.keys.length))} DNSKEY · ${escapeHTML(String(audit.dsRecords.length))} DS</p></div>
     ${pill(audit.overall, tone, audit.overall === 'secure' ? 'check' : 'warning')}
   </div>
   <div class="audit-stats">
@@ -579,8 +806,8 @@ function renderAuditEvidence(audit) {
 
 function renderHowItWorks() {
   const article = articleById('live-dns-dig');
-  return `<div class="learn-config-intro"><div><span class="eyebrow">How it works</span><h2>Browsers cannot run dig</h2><p>This page uses DNS-over-HTTPS JSON from Cloudflare and Google. That is a real DNS query, but it is a recursive resolver’s view, not authoritative truth. Read the flags, compare resolvers and then verify with dig/delv.</p></div><div class="learn-config-stats"><div><strong>DoH</strong><span>transport</span></div><div><strong>AD</strong><span>validation flag</span></div><div><strong>DS</strong><span>parent trust</span></div><div><strong>dig</strong><span>terminal truth</span></div></div></div>
+  return `<div class="learn-config-intro"><div><span class="eyebrow">How it works</span><h2>Browsers cannot run dig</h2><p>This page uses DNS-over-HTTPS JSON from Cloudflare, Google or a custom HTTPS endpoint you add. That is a real DNS query, but it is a recursive resolver’s view, not authoritative truth. Read the flags, compare resolvers and then verify with dig/delv.</p></div><div class="learn-config-stats"><div><strong>DoH</strong><span>transport</span></div><div><strong>AD</strong><span>validation flag</span></div><div><strong>DS</strong><span>parent trust</span></div><div><strong>dig</strong><span>terminal truth</span></div></div></div>
   ${article ? article.sections.map((section) => `<section class="doc-section" id="${escapeHTML(section.id)}"><h2>${escapeHTML(section.title)}</h2>${section.html}</section>`).join('') : ''}
   <div class="callout warn">${icon('warning', 18)}<div><strong>Why not UDP/53?</strong><p>A web page has no raw UDP or TCP socket API, so JavaScript cannot send a classic DNS query to port 53. Browsers only expose HTTP(S), WebSocket and a few higher-level transports. The app therefore uses DNS-over-HTTPS JSON, which is a real DNS lookup but a recursive resolver’s view. To test UDP/TCP 53, authoritative servers, AXFR or TSIG, copy the generated <code>dig</code>/<code>delv</code> commands and run them from a host with network access. A server-side query endpoint would remove that limitation, but it would also add an upload/query API and a much larger attack surface to this otherwise static container.</p></div></div>
-  <div class="callout info">${icon('info', 18)}<div><strong>Why only Cloudflare and Google?</strong><p>The container’s Content-Security-Policy allows only these two DoH origins. A custom resolver would require changing the CSP and the container build, which is intentionally not a click-away action.</p></div></div>`;
+  <div class="callout warn">${icon('warning', 18)}<div><strong>Custom resolver trust</strong><p>Because custom endpoints are configured in the browser, the Content-Security-Policy permits HTTPS DoH requests generally instead of pinning two hostnames. Add only resolvers you trust: the selected resolver sees the query name and type and can return forged or filtered answers. The app validates the endpoint as HTTPS, stores it in localStorage and never uploads it. A custom endpoint must support the DoH JSON API and CORS; a plain BIND server on UDP/TCP 53 cannot be queried by the browser.</p></div></div>`;
 }

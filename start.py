@@ -116,7 +116,8 @@ FAILURES_LOCK = threading.Lock()
 NO_CACHE = "no-store, no-cache, must-revalidate, max-age=0"
 
 # Keep these in sync with the headers documented on the in-app security page.
-# The two DNS-over-HTTPS origins are the only permitted cross-origin requests.
+# DNS-over-HTTPS queries may target the built-in resolvers or a custom HTTPS
+# endpoint the operator adds in the browser; HTTPS is the transport floor.
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; "
@@ -124,7 +125,7 @@ SECURITY_HEADERS = {
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
-        "connect-src 'self' https://cloudflare-dns.com https://dns.google; "
+        "connect-src 'self' https:; "
         "object-src 'none'; "
         "worker-src 'none'; "
         "base-uri 'none'; "

@@ -488,7 +488,7 @@ export async function renderWorkbench(view, param, query) {
     </div>
     <div class="workbench-next">
       <a class="next-card" href="#/analyze"><span class="feature-icon">${icon('shield', 18)}</span><div><strong>Analyze the whole workspace</strong><span>Security, delegation, DNSSEC and zone hygiene with explanations.</span></div>${icon('arrow', 15)}</a>
-      <a class="next-card" href="#/live"><span class="feature-icon">${icon('globe', 18)}</span><div><strong>Verify live DNS</strong><span>Compare expected records with Cloudflare and Google over DoH.</span></div>${icon('arrow', 15)}</a>
+      <a class="next-card" href="#/live"><span class="feature-icon">${icon('globe', 18)}</span><div><strong>Verify live DNS</strong><span>Compare expected records with built-in or custom DoH resolvers.</span></div>${icon('arrow', 15)}</a>
       <a class="next-card" href="#/workbench?export=1"><span class="feature-icon">${icon('package', 18)}</span><div><strong>Export without guessing</strong><span>ZIP bundle, hashes, validate.sh and dig verification plan.</span></div>${icon('arrow', 15)}</a>
     </div>`;
   }

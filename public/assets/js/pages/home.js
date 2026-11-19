@@ -96,7 +96,7 @@ export async function renderHome(view) {
     ['analyze', 'shield', 'Analyze with reasons', 'Errors, warnings and best practices across named.conf, zones, delegation and DNSSEC — each with what, why and a fix.'],
     ['workbench', 'code', 'Multi-file workbench', 'named.conf includes, zone files, views, keys and journals. Edit, navigate and learn every directive in context.'],
     ['compare', 'diff', 'Line and semantic diff', 'Compare two files, or a saved snapshot with the current workspace. See record-level changes, TTLs and serials.'],
-    ['live', 'globe', 'Live DNS and DNSSEC', 'Query Cloudflare and Google over DoH, verify expected records, walk the DS/DNSKEY chain and generate dig commands.'],
+    ['live', 'globe', 'Live DNS and DNSSEC', 'Query Cloudflare, Google or your own DoH JSON resolver, verify expected records, walk the DS/DNSKEY chain and generate dig commands.'],
     ['zones', 'database', 'Zone explorer', 'Browse every record, inspect SOA/NS, find CNAME and glue mistakes, and verify forward/reverse consistency.'],
     ['learn', 'book', 'Learn the why', 'Long-form guides, a directive and record encyclopedia, and an 80-term glossary — linked from every finding.'],
   ];
@@ -193,12 +193,12 @@ export async function renderHome(view) {
         <p>BIND Workbench does not pretend to be a compiler. It combines a structural parser, a semantic analyzer and optional live DNSSEC checks, then gives you the exact commands to run the real tools.</p>
         <div class="check-columns">
           <div><h3>Offline</h3><ul><li>named.conf grammar, includes and file references</li><li>SOA, NS, CNAME, MX, SRV and glue rules</li><li>Delegation and parent/child consistency</li><li>DNSSEC key, DS, RRSIG and NSEC/NSEC3 hygiene</li><li>Recursion, transfer, update and logging posture</li></ul></div>
-          <div><h3>Live, opt-in</h3><ul><li>Cloudflare and Google DoH answers</li><li>Expected vs observed records from your zone</li><li>DS digest ↔ DNSKEY matching</li><li>Chain walk from apex to root</li><li>dig/delv command generation</li></ul></div>
+          <div><h3>Live, opt-in</h3><ul><li>Built-in and custom DoH answers</li><li>Expected vs observed records from your zone</li><li>DS digest ↔ DNSKEY matching</li><li>Chain walk from apex to root</li><li>dig/delv command generation</li></ul></div>
         </div>
       </div>
       <div class="privacy-facts">
         <div class="fact">${icon('check', 18)}<div><strong>No config upload endpoint</strong><span>The server has no config API, database or write path. The optional auth API only handles the login session.</span></div></div>
-        <div class="fact">${icon('check', 18)}<div><strong>Strict CSP</strong><span>Only self-hosted assets and two DoH origins are allowed.</span></div></div>
+        <div class="fact">${icon('check', 18)}<div><strong>Strict CSP</strong><span>Only self-hosted assets and HTTPS DoH endpoints are allowed.</span></div></div>
         <div class="fact">${icon('check', 18)}<div><strong>Safe export</strong><span>Original files plus manifest, hashes, validate.sh and dig plans.</span></div></div>
         <div class="fact">${icon('warning', 18)}<div><strong>Always run the real tools</strong><span>named-checkconf and named-checkzone with the exact BIND version remain the final gate.</span></div></div>
       </div>

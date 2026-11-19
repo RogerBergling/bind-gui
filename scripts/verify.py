@@ -105,6 +105,7 @@ def check_readme() -> None:
         "Analyze",
         "DNSSEC",
         "Live DNS",
+        "Custom DoH",
         "Security",
         "Development",
         "GHCR",
@@ -174,7 +175,7 @@ def check_start_py() -> None:
     text = read(ROOT / "start.py")
     for term in [
         "Content-Security-Policy",
-        "connect-src 'self' https://cloudflare-dns.com https://dns.google;",
+        "connect-src 'self' https:;",
         "frame-ancestors 'none'",
         "X-Content-Type-Options",
         "Referrer-Policy",
@@ -200,6 +201,10 @@ def check_start_py() -> None:
         fail("start.py CSP must not allow unsafe-eval")
     if "connect-src *" in text or "connect-src 'self' *" in text:
         fail("start.py CSP must not allow arbitrary outbound origins")
+    if "connect-src 'self' https:" not in text:
+        fail("start.py CSP must allow HTTPS DoH endpoints")
+    if "connect-src 'self' http:" in text:
+        fail("start.py CSP must not allow plain-HTTP DoH endpoints")
     if "BIND_WORKBENCH_PASSWORD" not in compose_for_check():
         fail("compose.yaml does not expose BIND_WORKBENCH_PASSWORD")
 

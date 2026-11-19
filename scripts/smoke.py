@@ -267,8 +267,10 @@ def main() -> int:
         csp = headers.get("content-security-policy", "")
         if "default-src 'self'" not in csp:
             failures.append("CSP does not default to self")
-        if "https://cloudflare-dns.com" not in csp or "https://dns.google" not in csp:
-            failures.append("CSP does not allow the curated DoH origins")
+        if "connect-src 'self' https:" not in csp:
+            failures.append("CSP does not allow HTTPS DoH endpoints")
+        if "connect-src 'self' http:" in csp:
+            failures.append("CSP allows plain-HTTP DoH endpoints")
         if "unsafe-eval" in csp:
             failures.append("CSP allows unsafe-eval")
         if "frame-ancestors 'none'" not in csp:
