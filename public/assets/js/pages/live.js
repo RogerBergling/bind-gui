@@ -150,7 +150,8 @@ export async function renderLive(view, query) {
   view.querySelector('#lookup-resolver').value = initialResolverChoice;
   view.querySelector('#lookup-compare-a').value = initialComparePair[0];
   view.querySelector('#lookup-compare-b').value = initialComparePair[1];
-  view.querySelector('#verify-resolver').value = initialSingleResolver;
+  const verifyResolverSelect = view.querySelector('#verify-resolver');
+  if (verifyResolverSelect) verifyResolverSelect.value = initialSingleResolver;
   view.querySelector('#chain-resolver').value = initialSingleResolver;
   view.querySelector('#audit-resolver').value = initialSingleResolver;
   updateLookupResolverFields();
