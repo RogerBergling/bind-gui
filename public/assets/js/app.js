@@ -196,10 +196,18 @@ function applyTheme(theme) {
   }
 }
 
+function defaultTheme() {
+  const configured = window.__APP_THEME__;
+  if (configured === 'light' || configured === 'dark') return configured;
+  if (configured === 'system') {
+    return window.matchMedia?.('(prefers-color-scheme: light)')?.matches ? 'light' : 'dark';
+  }
+  return 'dark';
+}
+
 function initTheme() {
   const settings = getSettings();
-  const systemLight = window.matchMedia?.('(prefers-color-scheme: light)')?.matches;
-  applyTheme(settings.theme || (systemLight ? 'light' : 'dark'));
+  applyTheme(settings.theme || defaultTheme());
   themeToggle?.addEventListener('click', () => {
     const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
     applyTheme(next);
@@ -230,8 +238,7 @@ window.addEventListener('storage', (event) => {
 window.addEventListener('workbench:data', (event) => {
   if (event.detail?.type !== 'settings') return;
   const settings = getSettings();
-  const systemLight = window.matchMedia?.('(prefers-color-scheme: light)')?.matches;
-  applyTheme(settings.theme || (systemLight ? 'light' : 'dark'));
+  applyTheme(settings.theme || defaultTheme());
 });
 
 initTheme();

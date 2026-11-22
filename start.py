@@ -90,6 +90,19 @@ load_env_file(ENV_FILE)
 PASSWORD_ENV = "BIND_WORKBENCH_PASSWORD"
 UPLOAD_PASSWORD_ENV = "BIND_WORKBENCH_UPLOAD_PASSWORD"
 SESSION_HOURS_ENV = "BIND_WORKBENCH_SESSION_HOURS"
+APP_THEME_ENV = "APP_THEME"
+APP_THEME_VALUES = {"dark", "light", "system"}
+APP_THEME_ALIASES = {"auto": "system", "white": "light"}
+
+
+def _theme_default() -> str:
+    value = os.environ.get(APP_THEME_ENV, "dark").strip().lower()
+    value = APP_THEME_ALIASES.get(value, value)
+    return value if value in APP_THEME_VALUES else "dark"
+
+
+APP_THEME = _theme_default()
+THEME_JS = f'window.__APP_THEME__ = "{APP_THEME}";\n'
 AUTH_PASSWORD = os.environ.get(PASSWORD_ENV, "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 UPLOAD_PASSWORD_OVERRIDE = os.environ.get(UPLOAD_PASSWORD_ENV, "")
@@ -312,6 +325,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             with contextlib.suppress(BrokenPipeError, ConnectionResetError):
                 self.wfile.write(body)
 
+    def _serve_theme(self) -> None:
+        """Serve the first-visit theme without requiring authentication."""
+        body = THEME_JS.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                self.wfile.write(body)
+
     def _redirect(self, location: str) -> None:
         self.send_response(302)
         self.send_header("Location", location)
@@ -469,6 +493,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _gate(self) -> bool:
         """Return True when the request may continue to the static handler."""
         path = self._path()
+        if path == "/theme.js":
+            self._serve_theme()
+            return False
         if path == "/api/auth-status":
             self._auth_status()
             return False

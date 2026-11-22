@@ -294,6 +294,13 @@ def main() -> int:
         if not isinstance(data, dict) or "version" not in data:
             failures.append("version.json is not a version object")
 
+        theme = fetch(port, "/theme.js")
+        theme_body = theme.read().decode("utf-8", "replace")
+        if theme.status != 200:
+            failures.append(f"GET /theme.js returned {theme.status}")
+        if "window.__APP_THEME__" not in theme_body:
+            failures.append("theme.js does not expose window.__APP_THEME__")
+
         license_response = fetch(port, "/LICENSE.txt")
         if license_response.status != 200:
             failures.append("LICENSE.txt was not served")

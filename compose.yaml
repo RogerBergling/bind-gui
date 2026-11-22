@@ -33,6 +33,8 @@ services:
       BIND_WORKBENCH_PASSWORD: ${BIND_WORKBENCH_PASSWORD:-}
       BIND_WORKBENCH_UPLOAD_PASSWORD: ${BIND_WORKBENCH_UPLOAD_PASSWORD:-}
       BIND_WORKBENCH_SESSION_HOURS: ${BIND_WORKBENCH_SESSION_HOURS:-12}
+      # First-visit theme: dark, light or system. A saved toggle choice wins.
+      APP_THEME: ${APP_THEME:-dark}
     tmpfs:
       - /tmp:size=8m
     security_opt:

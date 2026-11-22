@@ -131,6 +131,8 @@ def check_html() -> None:
         "BIND Workbench",
         "assets/css/app.css",
         "assets/js/app.js",
+        "assets/js/theme-init.js",
+        "/theme.js",
         "Content-Security-Policy",
     ]
     for term in required:
@@ -272,7 +274,7 @@ def check_assets() -> None:
         fail("app.css must not load remote assets")
     index = read(PUBLIC / "index.html")
     for href in re.findall(r'(?:href|src)=["\'](/[^"\']+)["\']', index):
-        if href.startswith("//"):
+        if href.startswith("//") or href == "/theme.js":
             continue
         target = PUBLIC / href.lstrip("/")
         if not target.exists():

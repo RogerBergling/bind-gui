@@ -106,6 +106,27 @@ docker compose logs --tail=20
 
 If you run `python3 start.py` directly, `.env` is loaded from the directory containing `start.py`; use `BIND_WORKBENCH_ENV_FILE=/path/to/.env` if it lives elsewhere. If `BIND_WORKBENCH_PASSWORD` is empty, the app login gate is deliberately disabled. Keep `.env` at mode `0600`, and prefer a secret manager for shared or production deployments; environment variables are visible to users who can inspect the container.
 
+### Theme modes
+
+`APP_THEME` sets the first-visit theme. The theme toggle saves the visitor's
+explicit choice, which overrides this default.
+
+| Value | Behavior |
+|---|---|
+| `dark` | Dark “control room” theme (default) |
+| `light` | Light/white theme |
+| `system` | Follow the browser/OS `prefers-color-scheme` |
+
+Set it in `.env` or Compose:
+
+```yaml
+environment:
+  APP_THEME: ${APP_THEME:-dark}
+```
+
+Invalid values fall back to `dark`. The default is served by `/theme.js` and
+applied before first paint, so there is no theme flash.
+
 ### First five minutes
 
 1. Open **Home** and choose **Import files**, **Import folder**, or drop a folder/ZIP.
@@ -142,6 +163,10 @@ Everything except the explicit DoH queries runs locally in the browser.
 | Complete production example | Learn |
 | --- | --- |
 | [![Complete example](docs/screenshots/complete.png)](docs/screenshots/complete.png) | [![Learning](docs/screenshots/learn.png)](docs/screenshots/learn.png) |
+
+| Home — light theme |
+| --- |
+| [![Home in light theme](docs/screenshots/home-light.png)](docs/screenshots/home-light.png) |
 
 | Import/upload password | |
 | --- | --- |
