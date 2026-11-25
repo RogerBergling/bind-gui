@@ -1,5 +1,7 @@
 # BIND Workbench
 
+**Project facts (2026-11-25):** version **1.1.4** · browser SPA + Python 3 standard-library server · Docker/GHCR · tests: `scripts/verify.py`, `scripts/smoke.py`, `node --test` · MIT licensed.
+
 **A local-first BIND DNS configuration studio: import, explain, analyze, compare, validate, verify and safely export `named.conf` and zone files — without uploading the configuration anywhere.**
 
 [![CI](https://github.com/RogerBergling/bind-gui/actions/workflows/ci.yml/badge.svg)](https://github.com/RogerBergling/bind-gui/actions/workflows/ci.yml)
@@ -144,9 +146,13 @@ Everything except the explicit DoH queries runs locally in the browser.
 
 ## Screenshots
 
-| Home | Workbench |
+| Home (dark, 1.1.3 capture) | Workbench |
 | --- | --- |
 | [![Home](docs/screenshots/home.png)](docs/screenshots/home.png) | [![Workbench](docs/screenshots/workbench.png)](docs/screenshots/workbench.png) |
+
+The dark home capture shows the 1.1.3 build badge; `home-light.png` below shows
+1.1.4. The layout is otherwise current. Regenerate the dark capture when a
+browser is available.
 
 | Analyze | Zones |
 | --- | --- |
